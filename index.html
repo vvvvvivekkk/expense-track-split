@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Split Four Ways</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap">
+<style>
+  /* Layout: single receipt-width column; who-owes-whom on top, entry + ledger below */
+  :root {
+    --bg:#f3f0e9; --surface:#fff; --surface-2:#faf8f3; --fg:#211f1b; --muted:#726c61; --faint:#9a9488;
+    --border:#e3ddd2; --accent:#335ccf; --accent-ink:#fff; --accent-soft:#e7ecfb;
+    --pos:#1f8a5b; --neg:#c14a2c; --neg-soft:#f7e4dc;
+    --shadow:0 1px 2px rgba(33,31,27,.05),0 8px 24px rgba(33,31,27,.05); --r:14px;
+    --sans:"Hanken Grotesk",system-ui,-apple-system,sans-serif;
+    --display:"Bricolage Grotesque","Hanken Grotesk",system-ui,sans-serif;
+    --mono:"Spline Sans Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#17161a; --surface:#201f24; --surface-2:#26252b; --fg:#efece6; --muted:#a39d92; --faint:#807a70;
+    --border:#343139; --accent:#8aa0f5; --accent-ink:#15151a; --accent-soft:#272a3a;
+    --pos:#52c48c; --neg:#e8775a; --neg-soft:#35241f;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#17161a; --surface:#201f24; --surface-2:#26252b; --fg:#efece6; --muted:#a39d92; --faint:#807a70;
+    --border:#343139; --accent:#8aa0f5; --accent-ink:#15151a; --accent-soft:#272a3a;
+    --pos:#52c48c; --neg:#e8775a; --neg-soft:#35241f;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans);
+       padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);}
+  img{max-width:100%;}
+  [hidden]{display:none!important;}
+  .wrap{max-width:620px;margin:0 auto;padding-inline:18px;padding-block:28px 64px;}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+
+  header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px;}
+  header.top h1{font-family:var(--display);font-weight:700;font-size:clamp(1.9rem,6vw,2.5rem);letter-spacing:-.02em;margin:0;text-wrap:balance;}
+  .total{text-align:right;}
+  .total .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);}
+  .total .val{font-size:1.15rem;font-weight:600;}
+
+  section{margin-bottom:22px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);}
+  .card-pad{padding:18px;}
+  .eyebrow{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 12px;}
+
+  #settleCard .settle-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--border);}
+  #settleCard .settle-row:first-of-type{border-top:0;}
+  .who{display:flex;align-items:center;gap:8px;min-width:0;}
+  .who .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .arrow{color:var(--accent);flex:0 0 auto;font-weight:600;}
+  .settle-row .amt{margin-left:auto;font-weight:600;font-size:1.02rem;}
+  .allset{display:flex;align-items:center;gap:10px;color:var(--pos);font-weight:600;}
+  .allset .dot{width:9px;height:9px;border-radius:50%;background:var(--pos);flex:0 0 auto;}
+  .empty{color:var(--muted);font-size:.95rem;}
+
+  .bal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .bal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;}
+  .bal .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bal .v{font-size:1.1rem;font-weight:600;margin-top:3px;}
+  .bal .st{font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:1px;}
+  .bal.pos .v{color:var(--pos);} .bal.neg .v{color:var(--neg);}
+
+  label.fld{display:block;margin-bottom:14px;}
+  label.fld>.lab{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:6px;letter-spacing:.02em;}
+  input[type=text],select{width:100%;font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;-webkit-appearance:none;appearance:none;}
+  input:focus-visible,select:focus-visible,button:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .amount-field{position:relative;}
+  .amount-field .cur{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-family:var(--mono);pointer-events:none;}
+  .amount-field input{padding-left:30px;font-family:var(--mono);font-size:1.05rem;}
+
+  .split-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .split-head .lab{font-size:.78rem;font-weight:600;color:var(--muted);}
+  .linkbtn{background:none;border:0;color:var(--accent);font:inherit;font-weight:600;font-size:.8rem;cursor:pointer;padding:2px 4px;border-radius:6px;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:var(--surface-2);border-radius:999px;padding:8px 13px;font:inherit;font-weight:500;cursor:pointer;user-select:none;color:var(--fg);}
+  .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);}
+  .chip .tick{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--faint);display:inline-grid;place-items:center;flex:0 0 auto;}
+  .chip[aria-pressed="true"] .tick{background:var(--accent);border-color:var(--accent);}
+  .chip[aria-pressed="true"] .tick::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent-ink);}
+
+  button.primary{width:100%;margin-top:4px;background:var(--accent);color:var(--accent-ink);border:0;border-radius:11px;padding:13px;font:inherit;font-weight:700;font-size:1rem;cursor:pointer;}
+  button.primary:disabled{opacity:.5;cursor:default;}
+  button.primary:not(:disabled):active{transform:translateY(1px);}
+
+  .exp{display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-top:1px solid var(--border);}
+  .exp:first-child{border-top:0;}
+  .exp .body{flex:1;min-width:0;}
+  .exp .desc{font-weight:600;}
+  .exp .meta{font-size:.82rem;color:var(--muted);margin-top:2px;}
+  .exp .meta b{color:var(--fg);font-weight:600;}
+  .exp .right{text-align:right;flex:0 0 auto;}
+  .exp .right .amt{font-weight:600;font-size:1.02rem;}
+  .exp .right .each{font-size:.74rem;color:var(--muted);margin-top:2px;}
+  .del{background:none;border:0;color:var(--faint);cursor:pointer;font-size:1.1rem;line-height:1;padding:4px;border-radius:6px;margin-top:2px;}
+  .del:hover{color:var(--neg);}
+
+  details.settings{margin-top:10px;}
+  details.settings>summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:.85rem;list-style:none;padding:8px 2px;display:inline-flex;align-items:center;gap:6px;}
+  details.settings>summary::-webkit-details-marker{display:none;}
+  details.settings>summary .chev{transition:transform .2s;}
+  details.settings[open]>summary .chev{transform:rotate(90deg);}
+  .set-row{display:flex;gap:8px;align-items:center;margin-bottom:9px;}
+  .set-row input[type=text]{flex:1;}
+  .set-row .removep{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 11px;cursor:pointer;font:inherit;}
+  .set-row .removep:hover{color:var(--neg);border-color:var(--neg);}
+  .addp{display:flex;gap:8px;margin:12px 0 18px;}
+  .addp input{flex:1;}
+  .addp button{background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:11px 14px;font:inherit;font-weight:600;cursor:pointer;}
+
+  .banner{display:none;border-radius:10px;padding:10px 13px;font-size:.86rem;font-weight:500;margin-bottom:18px;}
+  .banner.warn{background:var(--neg-soft);color:var(--neg);border:1px solid var(--neg);}
+  .banner.info{background:var(--accent-soft);color:var(--fg);border:1px solid var(--accent);}
+  .sync{font-size:.72rem;color:var(--faint);display:inline-flex;align-items:center;gap:6px;}
+  .sync .d{width:7px;height:7px;border-radius:50%;background:var(--pos);} .sync.off .d{background:var(--neg);}
+  #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0));transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:600;font-size:.9rem;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:50;max-width:90vw;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .foot{color:var(--faint);font-size:.78rem;text-align:center;margin-top:30px;}
+
+  .bal{cursor:pointer;text-align:left;width:100%;font:inherit;transition:border-color .15s,transform .05s;}
+  .bal:hover{border-color:var(--accent);}
+  .bal:active{transform:translateY(1px);}
+  .bal .more{font-size:.7rem;color:var(--accent);font-weight:600;margin-top:6px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(20,18,14,.5);display:flex;align-items:flex-end;justify-content:center;z-index:60;}
+  @media (min-width:560px){ .overlay{align-items:center;padding:20px;} }
+  .sheet{width:100%;max-width:560px;max-height:86vh;overflow:auto;border-radius:18px 18px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0));box-shadow:var(--shadow);}
+  @media (min-width:560px){ .sheet{border-radius:18px;} }
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+  .pf-name{font-family:var(--display);font-weight:700;font-size:1.5rem;margin:0;letter-spacing:-.01em;}
+  .pf-close{background:var(--surface-2);border:1px solid var(--border);color:var(--fg);width:34px;height:34px;border-radius:50%;font-size:1.25rem;line-height:1;cursor:pointer;flex:0 0 auto;}
+  .pf-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;}
+  @media (max-width:440px){ .pf-stats{grid-template-columns:1fr;} }
+  .pf-stat{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 13px;}
+  .pf-stat .k{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);}
+  .pf-stat .vv{font-size:1.15rem;font-weight:600;margin-top:3px;}
+  .pf-stat.pos .vv{color:var(--pos);} .pf-stat.neg .vv{color:var(--neg);}
+  .pf-exp{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--border);}
+  .pf-exp:first-of-type{border-top:0;}
+  .pf-exp .body{flex:1;min-width:0;}
+  .pf-exp .desc{font-weight:600;}
+  .pf-exp .meta{font-size:.8rem;color:var(--muted);margin-top:2px;}
+  .pf-exp .meta .tag{color:var(--accent);font-weight:600;}
+  .pf-exp .share{text-align:right;flex:0 0 auto;font-weight:600;}
+  .pf-exp .share .k{display:block;font-size:.68rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Split Four Ways</h1>
+    <div class="total">
+      <div class="label">Total spent</div>
+      <div class="val num" id="totalSpent">—</div>
+    </div>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <section id="settleSection">
+    <div class="card card-pad" id="settleCard">
+      <p class="eyebrow">Settle up</p>
+      <div id="settleBody"><p class="empty">Loading…</p></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Balances</p>
+    <div class="bal-grid" id="balances"></div>
+  </section>
+
+  <section>
+    <div class="card card-pad">
+      <p class="eyebrow">Add an expense</p>
+      <form id="addForm" autocomplete="off">
+        <label class="fld" for="amount">
+          <span class="lab">Amount</span>
+          <span class="amount-field"><span class="cur" id="curSign">₹</span>
+            <input id="amount" type="text" inputmode="decimal" placeholder="0.00" required></span>
+        </label>
+        <label class="fld" for="desc">
+          <span class="lab">What for</span>
+          <input id="desc" type="text" placeholder="Dinner, groceries, cab…" required>
+        </label>
+        <label class="fld" for="paidBy">
+          <span class="lab">Paid by</span>
+          <select id="paidBy"></select>
+        </label>
+        <div class="fld">
+          <div class="split-head">
+            <span class="lab">Split between</span>
+            <button type="button" class="linkbtn" id="toggleAll">Select all</button>
+          </div>
+          <div class="chips" id="splitAmong"></div>
+        </div>
+        <button type="submit" class="primary" id="submitBtn">Add expense</button>
+      </form>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Expenses</p>
+    <div class="card card-pad"><div id="expenseList"><p class="empty">Loading…</p></div></div>
+    <details class="settings">
+      <summary><span class="chev">›</span> People &amp; currency</summary>
+      <div class="card card-pad" style="margin-top:10px">
+        <p class="eyebrow">Rename people</p>
+        <div id="peopleSettings"></div>
+        <div class="addp">
+          <input id="newPerson" type="text" placeholder="Add a person…">
+          <button type="button" id="addPersonBtn">Add</button>
+        </div>
+        <p class="eyebrow">Currency</p>
+        <select id="currency" style="max-width:220px">
+          <option value="₹">₹  Rupee (INR)</option>
+          <option value="NT$">NT$  Taiwan dollar</option>
+          <option value="$">$  Dollar</option>
+          <option value="€">€  Euro</option>
+          <option value="£">£  Pound</option>
+          <option value="¥">¥  Yen / Yuan</option>
+        </select>
+      </div>
+    </details>
+  </section>
+
+  <p class="foot"><span class="sync" id="sync" hidden><span class="d"></span><span id="syncText">Synced to Google Sheet</span></span></p>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="profileOverlay" class="overlay" hidden>
+  <div class="sheet card" role="dialog" aria-modal="true" aria-labelledby="pfName">
+    <div class="sheet-head">
+      <h2 class="pf-name" id="pfName"></h2>
+      <button class="pf-close" id="pfClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="pf-stats" id="pfStats"></div>
+    <p class="eyebrow">Expenses they're in</p>
+    <div id="pfList"></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG — paste your Google Apps Script Web App URL here (ends in /exec)
+   ========================================================================= */
+var API_URL   = "PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE";
+var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
+
+(function () {
+  "use strict";
+  var CONFIGURED = API_URL && API_URL.indexOf("PASTE_YOUR") < 0;
+  var LOCAL_KEY = "split4_local_v1";
+  var POLL_MS = 10000;
+
+  var people = [], expenses = [], currency = "₹";
+  var selected = {}, orderIdx = {}, ready = false, busy = false, peopleSig = "";
+
+  function el(id){ return document.getElementById(id); }
+  function fmt(minor){ var n=minor<0; minor=Math.abs(minor);
+    return (n?"-":"")+currency+(minor/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function parseAmount(s){ if(!s) return NaN; s=String(s).replace(/,/g,"").trim(); var v=parseFloat(s);
+    return isFinite(v)?Math.round(v*100):NaN; }
+  function byOrder(a,b){ return (orderIdx[a]||0)-(orderIdx[b]||0); }
+  function nameOf(id){ for(var i=0;i<people.length;i++) if(people[i].id===id) return people[i].name; return "Someone"; }
+  function focusWithin(id){ var c=el(id); return c && c.contains(document.activeElement); }
+
+  function shares(amountMinor, members){ var n=members.length,out={}; if(!n) return out;
+    var base=Math.floor(amountMinor/n), rem=amountMinor-base*n, o=members.slice().sort(byOrder);
+    for(var i=0;i<o.length;i++) out[o[i]]=base+(i<rem?1:0); return out; }
+
+  function balances(){ var b={}; people.forEach(function(p){ b[p.id]=0; });
+    expenses.forEach(function(e){ if(b[e.paidBy]===undefined) return; b[e.paidBy]+=e.amountMinor;
+      var m=(e.splitAmong||[]).filter(function(id){ return b[id]!==undefined; });
+      var sh=shares(e.amountMinor,m); m.forEach(function(id){ b[id]-=sh[id]; }); });
+    return b; }
+
+  function settlements(b){ var cred=[],debt=[];
+    Object.keys(b).forEach(function(id){ var v=b[id]; if(v>0)cred.push({id:id,amt:v}); else if(v<0)debt.push({id:id,amt:-v}); });
+    cred.sort(function(a,c){return c.amt-a.amt;}); debt.sort(function(a,c){return c.amt-a.amt;});
+    var out=[],i=0,j=0; while(i<cred.length&&j<debt.length){ var x=Math.min(cred[i].amt,debt[j].amt);
+      if(x>0) out.push({from:debt[j].id,to:cred[i].id,amt:x}); cred[i].amt-=x; debt[j].amt-=x;
+      if(cred[i].amt===0)i++; if(debt[j].amt===0)j++; } return out; }
+
+  var toastT;
+  function toast(m){ var t=el("toast"); t.textContent=m; t.classList.add("show");
+    clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.remove("show"); },2600); }
+
+  /* ---------- render ---------- */
+  function render(){ renderTotals(); renderSettle(); renderBalances(); renderLedger(); }
+  function renderTotals(){ var t=expenses.reduce(function(s,e){return s+e.amountMinor;},0);
+    el("totalSpent").textContent=expenses.length?fmt(t):"—"; el("curSign").textContent=currency; }
+
+  function renderSettle(){ var box=el("settleBody"); box.textContent="";
+    if(!ready){ box.innerHTML='<p class="empty">Loading…</p>'; return; }
+    if(!expenses.length){ box.innerHTML='<p class="empty">Add an expense to see who owes whom.</p>'; return; }
+    var tx=settlements(balances());
+    if(!tx.length){ var d=document.createElement("div"); d.className="allset";
+      var dot=document.createElement("span"); dot.className="dot";
+      var sp=document.createElement("span"); sp.textContent="All settled up — nobody owes anything.";
+      d.appendChild(dot); d.appendChild(sp); box.appendChild(d); return; }
+    tx.forEach(function(t){ var row=document.createElement("div"); row.className="settle-row";
+      var who=document.createElement("div"); who.className="who";
+      var f=document.createElement("span"); f.className="nm"; f.textContent=nameOf(t.from);
+      var a=document.createElement("span"); a.className="arrow"; a.textContent="→";
+      var to=document.createElement("span"); to.className="nm"; to.textContent=nameOf(t.to);
+      who.appendChild(f); who.appendChild(a); who.appendChild(to);
+      var amt=document.createElement("span"); amt.className="amt num"; amt.textContent=fmt(t.amt);
+      row.appendChild(who); row.appendChild(amt); box.appendChild(row); }); }
+
+  function renderBalances(){ var g=el("balances"); g.textContent="";
+    if(!people.length){ var e=document.createElement("p"); e.className="empty"; e.textContent=ready?"No people yet.":"Loading…"; g.appendChild(e); return; }
+    var b=balances();
+    people.forEach(function(p){ var v=b[p.id]||0; var c=document.createElement("button");
+      c.type="button"; c.className="bal"+(v>0?" pos":v<0?" neg":""); c.setAttribute("aria-label","View "+p.name+"'s spending");
+      var nm=document.createElement("div"); nm.className="nm"; nm.textContent=p.name;
+      var val=document.createElement("div"); val.className="v num"; val.textContent=fmt(v);
+      var st=document.createElement("div"); st.className="st"; st.textContent=v>0?"is owed":v<0?"owes":"settled up";
+      var more=document.createElement("div"); more.className="more"; more.textContent="View spending →";
+      c.appendChild(nm); c.appendChild(val); c.appendChild(st); c.appendChild(more);
+      c.addEventListener("click", function(){ openProfile(p.id); });
+      g.appendChild(c); }); }
+
+  /* ---------- profile ---------- */
+  function openProfile(id){
+    var p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i];
+    if(!p) return;
+    var paid=0, share=0, rows=[];
+    expenses.forEach(function(e){
+      var members=(e.splitAmong||[]).filter(function(x){ return people.some(function(q){return q.id===x;}); });
+      var mine = members.indexOf(id)>=0 ? shares(e.amountMinor,members)[id] : 0;
+      var isPayer = e.paidBy===id;
+      if(isPayer) paid+=e.amountMinor;
+      if(mine) share+=mine;
+      if(isPayer || mine) rows.push({e:e, mine:mine, isPayer:isPayer});
+    });
+    var net=paid-share;
+
+    el("pfName").textContent=p.name;
+
+    var stats=el("pfStats"); stats.textContent="";
+    [["Paid out", fmt(paid), ""],
+     ["Their share", fmt(share), ""],
+     [net>=0?"Gets back":"Owes", fmt(Math.abs(net)), net>0?"pos":net<0?"neg":""]
+    ].forEach(function(s){ var d=document.createElement("div"); d.className="pf-stat"+(s[2]?" "+s[2]:"");
+      var k=document.createElement("div"); k.className="k"; k.textContent=s[0];
+      var vv=document.createElement("div"); vv.className="vv num"; vv.textContent=s[1];
+      d.appendChild(k); d.appendChild(vv); stats.appendChild(d); });
+
+    var list=el("pfList"); list.textContent="";
+    if(!rows.length){ list.innerHTML='<p class="empty">No expenses yet.</p>'; }
+    rows.sort(function(a,b){ return (b.e.createdAt||0)-(a.e.createdAt||0); }).forEach(function(r){
+      var row=document.createElement("div"); row.className="pf-exp";
+      var body=document.createElement("div"); body.className="body";
+      var desc=document.createElement("div"); desc.className="desc"; desc.textContent=r.e.desc||"Expense";
+      var meta=document.createElement("div"); meta.className="meta";
+      meta.appendChild(document.createTextNode("Total "+fmt(r.e.amountMinor)+"  ·  "));
+      if(r.isPayer){ var tag=document.createElement("span"); tag.className="tag"; tag.textContent=p.name+" paid"; meta.appendChild(tag); }
+      else { meta.appendChild(document.createTextNode("paid by "+nameOf(r.e.paidBy))); }
+      body.appendChild(desc); body.appendChild(meta);
+      var sh=document.createElement("div"); sh.className="share num";
+      var k=document.createElement("span"); k.className="k"; k.textContent="their share";
+      sh.appendChild(document.createTextNode(fmt(r.mine))); sh.appendChild(k);
+      row.appendChild(body); row.appendChild(sh); list.appendChild(row);
+    });
+
+    var ov=el("profileOverlay"); ov.hidden=false;
+    try{ document.body.style.overflow="hidden"; }catch(_){}
+    el("pfClose").focus();
+  }
+  function closeProfile(){ el("profileOverlay").hidden=true; try{ document.body.style.overflow=""; }catch(_){} }
+  el("pfClose").addEventListener("click", closeProfile);
+  el("profileOverlay").addEventListener("click", function(ev){ if(ev.target===el("profileOverlay")) closeProfile(); });
+  document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("profileOverlay").hidden) closeProfile(); });
+
+  function renderLedger(){ var list=el("expenseList"); list.textContent="";
+    if(!ready){ list.innerHTML='<p class="empty">Loading…</p>'; return; }
+    if(!expenses.length){ list.innerHTML='<p class="empty">No expenses yet. Add the first one above.</p>'; return; }
+    expenses.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).forEach(function(e){
+      var members=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
+      var row=document.createElement("div"); row.className="exp";
+      var body=document.createElement("div"); body.className="body";
+      var desc=document.createElement("div"); desc.className="desc"; desc.textContent=e.desc||"Expense";
+      var meta=document.createElement("div"); meta.className="meta";
+      var paid=document.createElement("b"); paid.textContent=nameOf(e.paidBy);
+      meta.appendChild(document.createTextNode("Paid by ")); meta.appendChild(paid);
+      meta.appendChild(document.createTextNode("  ·  split between "+(members.map(nameOf).join(", ")||"nobody")));
+      body.appendChild(desc); body.appendChild(meta);
+      var right=document.createElement("div"); right.className="right";
+      var amt=document.createElement("div"); amt.className="amt num"; amt.textContent=fmt(e.amountMinor); right.appendChild(amt);
+      if(members.length){ var per=Math.round(e.amountMinor/members.length);
+        var ea=document.createElement("div"); ea.className="each num"; ea.textContent=fmt(per)+" each"; right.appendChild(ea); }
+      var del=document.createElement("button"); del.className="del"; del.title="Delete"; del.setAttribute("aria-label","Delete expense"); del.textContent="×";
+      del.addEventListener("click", function(){ deleteExpense(e.id); });
+      row.appendChild(body); row.appendChild(right); row.appendChild(del); list.appendChild(row); }); }
+
+  function renderPeopleControls(){
+    var sel=el("paidBy"), prev=sel.value; sel.textContent="";
+    people.forEach(function(p){ var o=document.createElement("option"); o.value=p.id; o.textContent=p.name; sel.appendChild(o); });
+    if(people.some(function(p){return p.id===prev;})) sel.value=prev;
+
+    var chips=el("splitAmong"); chips.textContent="";
+    people.forEach(function(p){ if(selected[p.id]===undefined) selected[p.id]=true;
+      var chip=document.createElement("button"); chip.type="button"; chip.className="chip"; chip.setAttribute("aria-pressed",String(!!selected[p.id]));
+      var tick=document.createElement("span"); tick.className="tick";
+      var lab=document.createElement("span"); lab.textContent=p.name;
+      chip.appendChild(tick); chip.appendChild(lab);
+      chip.addEventListener("click", function(){ selected[p.id]=!selected[p.id]; chip.setAttribute("aria-pressed",String(selected[p.id])); toggleLabel(); });
+      chips.appendChild(chip); });
+    Object.keys(selected).forEach(function(id){ if(!people.some(function(p){return p.id===id;})) delete selected[id]; });
+    toggleLabel();
+
+    var ps=el("peopleSettings"); ps.textContent="";
+    people.forEach(function(p){ var row=document.createElement("div"); row.className="set-row";
+      var inp=document.createElement("input"); inp.type="text"; inp.value=p.name; inp.setAttribute("aria-label","Name");
+      var save=function(){ var nv=inp.value.trim(); if(!nv||nv===p.name){ inp.value=p.name; return; } renamePerson(p.id,nv); };
+      inp.addEventListener("blur",save);
+      inp.addEventListener("keydown",function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); inp.blur(); } });
+      var rm=document.createElement("button"); rm.className="removep"; rm.type="button"; rm.textContent="Remove"; rm.setAttribute("aria-label","Remove "+p.name);
+      rm.addEventListener("click", function(){ removePerson(p.id); });
+      row.appendChild(inp); row.appendChild(rm); ps.appendChild(row); }); }
+
+  function toggleLabel(){ var allOn=people.length>0&&people.every(function(p){return selected[p.id];});
+    el("toggleAll").textContent=allOn?"Clear all":"Select all"; }
+
+  function afterData(){ people.sort(function(a,b){return (a.order||0)-(b.order||0);});
+    orderIdx={}; people.forEach(function(p){ orderIdx[p.id]=p.order||0; });
+    var sig=JSON.stringify(people);
+    if(sig!==peopleSig && !focusWithin("peopleSettings") && !focusWithin("addForm")){ peopleSig=sig; renderPeopleControls(); }
+    else if(!peopleSig){ peopleSig=sig; renderPeopleControls(); }
+    render(); }
+
+  function applyData(d){ currency=d.currency||"₹"; el("currency").value=currency;
+    people=(d.people||[]).map(function(p){ return {id:String(p.id),name:String(p.name),order:Number(p.order)||0}; });
+    expenses=(d.expenses||[]).map(function(e){ return {
+      id:String(e.id), desc:String(e.desc||""), amountMinor:Math.round((Number(e.amount)||0)*100),
+      paidBy:String(e.paidBy||""), splitAmong:Array.isArray(e.splitAmong)?e.splitAmong.map(String):[], createdAt:Number(e.createdAt)||0 }; });
+    ready=true; afterData(); }
+
+  /* ---------- API (Google Sheet via Apps Script) ---------- */
+  function apiLoad(){ var u=API_URL+(API_URL.indexOf("?")>=0?"&":"?")+"action=load"+(API_TOKEN?"&token="+encodeURIComponent(API_TOKEN):"");
+    return fetch(u).then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error||"load failed"); return j.data; }); }
+  function apiPost(payload){ payload.token=API_TOKEN;
+    return fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)})
+      .then(function(r){return r.json();}).then(function(j){ if(!j.ok) throw new Error(j.error||"save failed"); return j.data; }); }
+
+  function setSync(ok,text){ var s=el("sync"); s.hidden=false; s.classList.toggle("off",!ok); el("syncText").textContent=text; }
+
+  function doPoll(){ if(!CONFIGURED||busy) return;
+    apiLoad().then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); })
+      .catch(function(){ setSync(false,"Can't reach the Sheet — retrying"); }); }
+
+  /* ---------- writes ---------- */
+  function withServer(payload, okMsg){
+    if(!CONFIGURED){ return Promise.resolve(localWrite(payload)); }
+    busy=true; setSync(true,"Saving…");
+    return apiPost(payload).then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); if(okMsg) toast(okMsg); })
+      .catch(function(err){ toast("Couldn't save — "+err.message); setSync(false,"Save failed"); })
+      .then(function(){ busy=false; }); }
+
+  function deleteExpense(id){ withServer({action:"deleteExpense",id:id}); }
+  function renamePerson(id,name){ withServer({action:"renamePerson",id:id,name:name}); }
+  function addPerson(name){ withServer({action:"addPerson",name:name},"Added "+name); }
+  function removePerson(id){
+    var used=expenses.some(function(e){ return e.paidBy===id||(e.splitAmong||[]).indexOf(id)>=0; });
+    if(used){ toast("Can't remove — they're in an expense."); return; }
+    if(people.length<=1){ toast("Keep at least one person."); return; }
+    withServer({action:"removePerson",id:id}); }
+  function setCurrency(c){ currency=c; render(); withServer({action:"setCurrency",currency:c}); }
+
+  /* ---------- local fallback (only if API_URL not set) ---------- */
+  function localWrite(p){ var d=loadLocal();
+    if(p.action==="addExpense"){ d.expenses.push({id:lid(),desc:p.desc,amount:p.amount,paidBy:p.paidBy,splitAmong:p.splitAmong,createdAt:Date.now()}); }
+    else if(p.action==="deleteExpense"){ d.expenses=d.expenses.filter(function(x){return x.id!==p.id;}); }
+    else if(p.action==="addPerson"){ var mo=d.people.reduce(function(m,x){return Math.max(m,x.order||0);},0); d.people.push({id:lid(),name:p.name,order:mo+1}); }
+    else if(p.action==="renamePerson"){ d.people.forEach(function(x){ if(x.id===p.id)x.name=p.name; }); }
+    else if(p.action==="removePerson"){ d.people=d.people.filter(function(x){return x.id!==p.id;}); }
+    else if(p.action==="setCurrency"){ d.currency=p.currency; }
+    saveLocal(d); applyData(d); }
+  function lid(){ return "x"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+  function loadLocal(){ try{ var r=localStorage.getItem(LOCAL_KEY); if(r) return JSON.parse(r); }catch(_){}
+    return { people:[{id:"p1",name:"Akshay",order:1},{id:"p2",name:"Praney",order:2},{id:"p3",name:"Vivek",order:3},{id:"p4",name:"Logesh",order:4}], expenses:[], currency:"₹" }; }
+  function saveLocal(d){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(d)); }catch(_){} }
+
+  /* ---------- events ---------- */
+  el("addForm").addEventListener("submit", function(ev){ ev.preventDefault();
+    var minor=parseAmount(el("amount").value), desc=el("desc").value.trim(), paidBy=el("paidBy").value;
+    var among=people.filter(function(p){return selected[p.id];}).map(function(p){return p.id;});
+    if(!(minor>0)){ toast("Enter an amount greater than zero."); el("amount").focus(); return; }
+    if(!desc){ toast("Add a short description."); el("desc").focus(); return; }
+    if(!paidBy){ toast("Choose who paid."); return; }
+    if(!among.length){ toast("Pick at least one person to split between."); return; }
+    withServer({action:"addExpense",desc:desc,amount:minor/100,paidBy:paidBy,splitAmong:among},"Expense added")
+      .then(function(){ el("amount").value=""; el("desc").value=""; el("amount").focus(); }); });
+
+  el("toggleAll").addEventListener("click", function(){ var allOn=people.length>0&&people.every(function(p){return selected[p.id];});
+    people.forEach(function(p){ selected[p.id]=!allOn; }); renderPeopleControls(); });
+  el("addPersonBtn").addEventListener("click", function(){ var v=el("newPerson").value.trim(); if(!v){ el("newPerson").focus(); return; } addPerson(v); el("newPerson").value=""; });
+  el("newPerson").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); el("addPersonBtn").click(); } });
+  el("currency").addEventListener("change", function(){ setCurrency(el("currency").value); });
+
+  /* ---------- boot ---------- */
+  if(!CONFIGURED){
+    el("banner").className="banner warn"; el("banner").style.display="block";
+    el("banner").textContent="Not connected to a Google Sheet yet — add your Apps Script URL in index.html (API_URL). Running in local-only mode for now.";
+    var d=loadLocal(); applyData(d);
+  } else {
+    apiLoad().then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); })
+      .catch(function(err){ ready=true; afterData(); setSync(false,"Can't reach the Sheet");
+        el("banner").className="banner warn"; el("banner").style.display="block";
+        el("banner").textContent="Couldn't reach the Google Sheet. Check the API_URL and that the web app is deployed to “Anyone”. ("+err.message+")"; });
+    setInterval(doPoll, POLL_MS);
+    document.addEventListener("visibilitychange", function(){ if(!document.hidden) doPoll(); });
+  }
+})();
+</script>
+</body>
+</html>
