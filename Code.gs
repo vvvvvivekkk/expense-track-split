@@ -16,6 +16,12 @@
  * automatically on first use, and People is seeded with Person 1–4.
  */
 
+// --- Which Google Sheet this writes to -----------------------------------
+// Pre-filled with your sheet. If you paste this script INTO the sheet
+// (Extensions -> Apps Script), you can leave it as-is or set it to "" —
+// either way it targets this sheet.
+var SHEET_ID = "1C3GSm17VsmJVpU0X87fIGs8nyk2Veqy5yUaZiUVAlHs";
+
 // --- Optional security ---------------------------------------------------
 // Leave "" to allow anyone with the URL (fine for a small group).
 // To harden: set the same non-empty string here AND in index.html (API_TOKEN).
@@ -171,8 +177,12 @@ function setSetting_(key, value) {
 // Sheet helpers
 // =========================================================================
 
+function ss_() {
+  return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+}
+
 function getOrCreate_(tabName, headers) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = ss_();
   var sh = ss.getSheetByName(tabName);
   if (!sh) {
     sh = ss.insertSheet(tabName);
