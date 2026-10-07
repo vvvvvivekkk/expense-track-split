@@ -13,7 +13,7 @@
  *      Copy the /exec URL it gives you and paste it into index.html.
  *
  * The three tabs (People, Expenses, Settings) are created
- * automatically on first use, and People is seeded with Person 1–4.
+ * automatically on first use, and People is seeded with the four names.
  */
 
 // --- Which Google Sheet this writes to -----------------------------------
