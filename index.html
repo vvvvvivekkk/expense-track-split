@@ -5,20 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Split Four Ways</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@500;600&display=swap">
 <style>
-  /* Netflix-style single dark theme: near-black ground, red accent, condensed display type.
-     Layout: single column; who-owes-whom on top, entry + ledger below. */
+  /* Netflix "world" to match the portfolio: cool near-black ground, red accent,
+     Anton display + Archivo body, faint cinematic grain. Single committed dark theme. */
   :root {
-    --bg:#141414; --surface:#1b1b1b; --surface-2:#262626; --fg:#ffffff; --muted:#b3b3b3; --faint:#7a7a7a;
-    --border:#2e2e2e; --accent:#e50914; --accent-ink:#ffffff; --accent-soft:#2b1316;
+    --bg:#0b0b0f; --surface:#17171f; --surface-2:#20202b; --fg:#f6f6f8; --muted:#9b9bab; --faint:#6e6e7e;
+    --border:#2a2a33; --accent:#e50914; --accent-bright:#ff2a35; --accent-ink:#ffffff; --accent-soft:#2b1316;
     --pos:#46d369; --pos-soft:#14301f; --neg:#ff5b5b; --neg-soft:#331518;
-    --shadow:0 2px 6px rgba(0,0,0,.5),0 12px 30px rgba(0,0,0,.55); --r:10px;
-    --sans:"Hanken Grotesk",system-ui,-apple-system,sans-serif;
-    --display:"Oswald","Hanken Grotesk",system-ui,sans-serif;
+    --shadow:0 2px 6px rgba(0,0,0,.5),0 16px 40px rgba(0,0,0,.6); --r:6px;
+    --sans:"Archivo",system-ui,"Segoe UI",Roboto,sans-serif;
+    --display:"Anton","Arial Narrow",Impact,sans-serif;
     --mono:"Spline Sans Mono",ui-monospace,"SF Mono",Menlo,monospace;
     color-scheme:dark;
   }
+  body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .wrap,.gate-inner{ position:relative; z-index:2; }
 
   *{box-sizing:border-box;}
   html,body{margin:0;}
@@ -287,17 +290,19 @@
   }
 
   /* Netflix "Who's watching?" gate + PIN */
-  .gate{position:fixed;inset:0;z-index:200;background:#0b0b0b;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;}
-  .gate-inner{width:100%;max-width:720px;text-align:center;padding-block:40px;}
-  .gate-brand{font-family:var(--display);font-weight:700;text-transform:uppercase;color:var(--accent);letter-spacing:.06em;font-size:1.6rem;margin-bottom:28px;}
-  .gate h2{font-family:var(--sans);font-weight:700;font-size:clamp(1.8rem,6vw,2.6rem);margin:0 0 8px;color:#fff;}
-  .gate .gate-sub{color:var(--muted);margin:0 0 34px;font-size:1rem;}
-  .profiles{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;}
-  .profile{background:none;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;padding:6px;border-radius:8px;}
-  .profile .av{width:104px;height:104px;max-width:24vw;max-height:24vw;border-radius:8px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:2.6rem;color:#fff;border:3px solid transparent;transition:transform .15s,border-color .15s;position:relative;}
-  .profile .nm{color:var(--muted);font-size:1rem;transition:color .15s;}
-  .profile:hover .av,.profile:focus-visible .av{transform:scale(1.06);border-color:#fff;}
-  .profile:hover .nm,.profile:focus-visible .nm{color:#fff;}
+  .gate{position:fixed;inset:0;z-index:200;background:radial-gradient(120% 120% at 50% 0%, #1a1a22 0%, var(--bg) 55%, #000 100%);display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;}
+  .gate-inner{width:100%;max-width:760px;text-align:center;padding-block:40px;}
+  .gate-brand{font-family:var(--display);text-transform:uppercase;color:var(--accent);letter-spacing:.12em;font-size:clamp(28px,7vw,52px);line-height:1;margin-bottom:28px;text-shadow:0 0 36px rgba(229,9,20,.45);}
+  .gate-brand span{display:inline-block;opacity:0;transform:translateY(16px);animation:letterin .5s cubic-bezier(.2,.7,.2,1) forwards;}
+  @keyframes letterin{to{opacity:1;transform:none;}}
+  .gate h2{font-family:var(--sans);font-weight:600;font-size:clamp(1.7rem,5.5vw,2.7rem);margin:0 0 8px;color:#fff;letter-spacing:-.01em;}
+  .gate .gate-sub{color:var(--muted);margin:0 0 36px;font-size:1rem;}
+  .profiles{display:flex;flex-wrap:wrap;gap:clamp(16px,3vw,34px);justify-content:center;max-width:760px;margin:0 auto;}
+  .profile{background:none;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;padding:4px;border-radius:8px;width:clamp(92px,20vw,128px);color:var(--muted);transition:color .2s;}
+  .profile .av{width:clamp(92px,20vw,128px);height:clamp(92px,20vw,128px);border-radius:8px;display:grid;place-items:center;font-family:var(--display);font-size:clamp(34px,8vw,52px);color:#fff;border:3px solid transparent;transition:transform .2s,border-color .2s;position:relative;}
+  .profile .nm{font-size:clamp(13px,2.4vw,16px);transition:color .2s;}
+  .profile:hover,.profile:focus-visible{color:#fff;outline:none;}
+  .profile:hover .av,.profile:focus-visible .av{transform:translateY(-4px);border-color:#fff;}
   .profile .av .lock{position:absolute;right:6px;bottom:6px;font-size:.8rem;background:rgba(0,0,0,.55);border-radius:5px;padding:1px 4px;}
   .gate-switchrow{margin-top:34px;}
 
@@ -320,7 +325,9 @@
   .me-chip .lbl{font-weight:600;font-size:.82rem;}
   .me-chip .caret{color:var(--muted);font-size:.7rem;}
   .you-badge{display:inline-block;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
-  .bal{transition:transform .12s,border-color .12s;} .bal:hover{transform:translateY(-2px);}
+  .bal{transition:transform .12s,border-color .12s;} .bal:not(.locked):hover{transform:translateY(-2px);}
+  .bal.locked{cursor:default;opacity:.92;}
+  .me-chip .role{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-left:2px;}
 
   @media (prefers-reduced-motion:reduce){*{transition:none!important;} .shake{animation:none;}}
 </style>
@@ -353,7 +360,7 @@
     <h1>Split Four Ways</h1>
     <div class="total">
       <button type="button" class="me-chip" id="meChip" hidden>
-        <span class="av" id="meAv"></span><span class="lbl" id="meLbl"></span><span class="caret">▾</span>
+        <span class="av" id="meAv"></span><span class="lbl" id="meLbl"></span><span class="role" id="meRole"></span><span class="caret">▾</span>
       </button>
       <div class="label" id="totalLabel">Total spent</div>
       <div class="val num" id="totalSpent">—</div>
@@ -777,19 +784,23 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function renderBalances(){ var g=el("balances"); g.textContent="";
     if(!people.length){ var e=document.createElement("p"); e.className="empty"; e.textContent=ready?"No people yet.":"Loading…"; g.appendChild(e); return; }
     var b=balances();
-    people.forEach(function(p){ var v=b[p.id]||0; var c=document.createElement("button");
-      c.type="button"; c.className="bal"+(v>0?" pos":v<0?" neg":""); c.setAttribute("aria-label","View "+p.name+"'s spending");
+    people.forEach(function(p){ var v=b[p.id]||0; var open=canOpen(p.id);
+      var c=document.createElement(open?"button":"div");
+      if(open) c.type="button";
+      c.className="bal"+(v>0?" pos":v<0?" neg":"")+(open?"":" locked");
+      if(open) c.setAttribute("aria-label","View "+p.name+"'s spending");
       var nm=document.createElement("div"); nm.className="nm"; nm.textContent=p.name;
       if(p.id===me){ var yb=document.createElement("span"); yb.className="you-badge"; yb.textContent="You"; nm.appendChild(yb); }
       var val=document.createElement("div"); val.className="v num"; val.textContent=fmt(v);
       var st=document.createElement("div"); st.className="st"; st.textContent=v>0?"is owed":v<0?"owes":"settled up";
-      var more=document.createElement("div"); more.className="more"; more.textContent="View spending →";
-      c.appendChild(nm); c.appendChild(val); c.appendChild(st); c.appendChild(more);
-      c.addEventListener("click", function(){ openProfile(p.id); });
+      c.appendChild(nm); c.appendChild(val); c.appendChild(st);
+      if(open){ var more=document.createElement("div"); more.className="more"; more.textContent="View spending →"; c.appendChild(more);
+        c.addEventListener("click", function(){ openProfile(p.id); }); }
       g.appendChild(c); }); }
 
   /* ---------- profile ---------- */
   function openProfile(id){
+    if(!canOpen(id)){ toast("Only Vivek can open other profiles."); return; }
     var p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i];
     if(!p) return;
     var paid=0, share=0, rows=[];
@@ -932,9 +943,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     shown.forEach(function(e){
       var members=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
       var row=document.createElement("div"); row.className="exp";
-      var body=document.createElement("div"); body.className="body editable"; body.setAttribute("role","button"); body.setAttribute("tabindex","0"); body.setAttribute("aria-label","Edit "+(e.desc||"expense"));
-      body.addEventListener("click", function(){ openEdit(e.id); });
-      body.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openEdit(e.id); } });
+      var body=document.createElement("div"); body.className="body";
+      if(canEdit()){ body.className="body editable"; body.setAttribute("role","button"); body.setAttribute("tabindex","0"); body.setAttribute("aria-label","Edit "+(e.desc||"expense"));
+        body.addEventListener("click", function(){ openEdit(e.id); });
+        body.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openEdit(e.id); } }); }
       var desc=document.createElement("div"); desc.className="desc"; desc.textContent=e.desc||"Expense";
       if(e.category){ var bdg=document.createElement("span"); bdg.className="cat-badge"; bdg.textContent=e.category; desc.appendChild(bdg); }
       var meta=document.createElement("div"); meta.className="meta";
@@ -950,9 +962,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var amt=document.createElement("div"); amt.className="amt num"; amt.textContent=fmt(e.amountMinor); right.appendChild(amt);
       if(members.length){ var per=Math.round(e.amountMinor/members.length);
         var ea=document.createElement("div"); ea.className="each num"; ea.textContent=fmt(per)+" each"; right.appendChild(ea); }
-      var del=document.createElement("button"); del.className="del"; del.title="Delete"; del.setAttribute("aria-label","Delete expense"); del.textContent="×";
-      del.addEventListener("click", function(){ deleteExpense(e.id); });
-      row.appendChild(body); row.appendChild(right); row.appendChild(del); list.appendChild(row); });
+      row.appendChild(body); row.appendChild(right);
+      if(canEdit()){ var del=document.createElement("button"); del.className="del"; del.title="Delete"; del.setAttribute("aria-label","Delete expense"); del.textContent="×";
+        del.addEventListener("click", function(){ deleteExpense(e.id); }); row.appendChild(del); }
+      list.appendChild(row); });
 
     if(sorted.length>LEDGER_PREVIEW){
       var more=document.createElement("button"); more.type="button"; more.className="showmore";
@@ -1353,6 +1366,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var editingId = null, editSelected = {};
 
   function openEdit(id){
+    if(!canEdit()){ toast("View-only — you can't edit expenses."); return; }
     var e=null; for(var i=0;i<expenses.length;i++) if(expenses[i].id===id) e=expenses[i];
     if(!e) return;
     editingId=id;
@@ -1409,6 +1423,9 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   /* ---------- Netflix profile gate + PIN ---------- */
   var me = null, gateInited = false;
   var AV_COLORS = ["#d9534f","#2d7fd4","#d98a3a","#3fae5a","#8e44ad","#16a085","#c0392b","#2c82c9"];
+  var AV_HUES = [0,210,35,140,280,170,8,195];
+  function hueFor(id){ return AV_HUES[colorIdx(id)%AV_HUES.length]; }
+  function avGrad(id){ var h=hueFor(id); return "linear-gradient(145deg,hsl("+h+" 70% 45%),hsl("+h+" 62% 24%))"; }
   var PIN_KEY = "split4_pins_v1", ME_KEY = "split4_me_v1";
   // Default PINs per profile (work on every device; a person can override on their own device).
   var DEFAULT_PINS = { p1:"2005", p2:"3699", p3:"7733", p4:"1234" }; // Akshay, Praney, Vivek, Logesh
@@ -1423,10 +1440,19 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function colorFor(id){ return AV_COLORS[colorIdx(id)%AV_COLORS.length]; }
   function initial(name){ return (name||"?").trim().charAt(0).toUpperCase()||"?"; }
 
+  /* ---------- roles / permissions (by profile name) ---------- */
+  var EDIT_NAMES = ["akshay","praney","vivek"];   // may edit/delete expenses
+  var ADMIN_NAMES = ["vivek"];                     // may open everyone's profile
+  function roleName(id){ return (nameOf(id)||"").trim().toLowerCase(); }
+  function canEdit(){ return !!me && EDIT_NAMES.indexOf(roleName(me))>=0; }
+  function isAdmin(){ return !!me && ADMIN_NAMES.indexOf(roleName(me))>=0; }
+  function canOpen(targetId){ return isAdmin() || targetId===me; }
+  function roleLabel(){ if(isAdmin()) return "Admin"; if(canEdit()) return "Editor"; return "View only"; }
+
   function renderGate(){ var box=el("gateProfiles"); if(!box) return; box.textContent="";
     people.forEach(function(p){
       var b=document.createElement("button"); b.type="button"; b.className="profile";
-      var av=document.createElement("div"); av.className="av"; av.style.background=colorFor(p.id); av.textContent=initial(p.name);
+      var av=document.createElement("div"); av.className="av"; av.style.background=avGrad(p.id); av.textContent=initial(p.name);
       if(pinFor(p.id)){ var lk=document.createElement("span"); lk.className="lock"; lk.textContent="🔒"; av.appendChild(lk); }
       var nm=document.createElement("div"); nm.className="nm"; nm.textContent=p.name;
       b.appendChild(av); b.appendChild(nm);
@@ -1449,7 +1475,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function openPin(id){ pinTarget=id; pinBuf=""; pinFirst="";
     var p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i];
     buildPinpad();
-    el("pinAvatar").style.background=colorFor(id); el("pinAvatar").textContent=initial(p?p.name:"?");
+    el("pinAvatar").style.background=avGrad(id); el("pinAvatar").textContent=initial(p?p.name:"?");
     el("pinName").textContent=p?p.name:"";
     el("pinErr").textContent="";
     if(pinFor(id)){ pinMode="enter"; el("pinTitle").textContent="Enter your PIN"; el("pinSkip").hidden=true; }
@@ -1479,7 +1505,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   }
   function renderMeChip(){ if(!me) return; var p=null; for(var i=0;i<people.length;i++) if(people[i].id===me) p=people[i];
     if(!p){ return; } var chip=el("meChip"); chip.hidden=false;
-    el("meAv").style.background=colorFor(me); el("meAv").textContent=initial(p.name); el("meLbl").textContent=p.name; }
+    el("meAv").style.background=avGrad(me); el("meAv").textContent=initial(p.name); el("meLbl").textContent=p.name;
+    el("meRole").textContent = isAdmin()?"· Admin":canEdit()?"":"· View only"; }
   function applyMeDefaults(){ if(me && el("paidBy") && people.some(function(p){return p.id===me;})) el("paidBy").value=me; }
 
   el("pinBack").addEventListener("click", openGate);
@@ -1490,7 +1517,11 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     else if(ev.key==="Backspace") pinPress("del");
     else if(ev.key==="Escape") openGate(); });
 
-  function initGateOnce(){ if(gateInited||!people.length) return; gateInited=true;
+  function splitBrand(){ var b=document.querySelector(".gate-brand"); if(!b||b.getAttribute("data-split")) return;
+    var txt=b.textContent; b.textContent=""; b.setAttribute("data-split","1");
+    txt.split("").forEach(function(ch,i){ var s=document.createElement("span"); s.textContent=ch===" "?" ":ch; s.style.animationDelay=(i*0.04)+"s"; b.appendChild(s); }); }
+
+  function initGateOnce(){ if(gateInited||!people.length) return; gateInited=true; splitBrand();
     var saved=null; try{ saved=sessionStorage.getItem(ME_KEY); }catch(_){}
     if(saved && people.some(function(p){return p.id===saved;})){ enterApp(saved); }
     else { renderGate(); el("gate").hidden=false; }
