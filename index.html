@@ -286,14 +286,75 @@
     #invoiceDoc{--iv-bg:#fff;--iv-fg:#1a1a1a;--iv-muted:#666;--iv-border:#e3ddd2;--iv-rule:#1a1a1a;--iv-brand:#1a1a1a;--iv-pos:#1f8a5b;--iv-neg:#c14a2c;border:0!important;padding:0!important;}
   }
 
-  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+  /* Netflix "Who's watching?" gate + PIN */
+  .gate{position:fixed;inset:0;z-index:200;background:#0b0b0b;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;}
+  .gate-inner{width:100%;max-width:720px;text-align:center;padding-block:40px;}
+  .gate-brand{font-family:var(--display);font-weight:700;text-transform:uppercase;color:var(--accent);letter-spacing:.06em;font-size:1.6rem;margin-bottom:28px;}
+  .gate h2{font-family:var(--sans);font-weight:700;font-size:clamp(1.8rem,6vw,2.6rem);margin:0 0 8px;color:#fff;}
+  .gate .gate-sub{color:var(--muted);margin:0 0 34px;font-size:1rem;}
+  .profiles{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;}
+  .profile{background:none;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;padding:6px;border-radius:8px;}
+  .profile .av{width:104px;height:104px;max-width:24vw;max-height:24vw;border-radius:8px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:2.6rem;color:#fff;border:3px solid transparent;transition:transform .15s,border-color .15s;position:relative;}
+  .profile .nm{color:var(--muted);font-size:1rem;transition:color .15s;}
+  .profile:hover .av,.profile:focus-visible .av{transform:scale(1.06);border-color:#fff;}
+  .profile:hover .nm,.profile:focus-visible .nm{color:#fff;}
+  .profile .av .lock{position:absolute;right:6px;bottom:6px;font-size:.8rem;background:rgba(0,0,0,.55);border-radius:5px;padding:1px 4px;}
+  .gate-switchrow{margin-top:34px;}
+
+  .pin-dots{display:flex;gap:16px;justify-content:center;margin:22px 0 8px;}
+  .pin-dots .dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted);transition:background .1s,border-color .1s;}
+  .pin-dots .dot.on{background:var(--accent);border-color:var(--accent);}
+  .pin-err{color:var(--neg);font-weight:600;min-height:20px;margin-bottom:8px;}
+  .pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:280px;margin:14px auto 0;}
+  .pinpad button{aspect-ratio:1;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:#fff;font-family:var(--mono);font-size:1.5rem;font-weight:600;cursor:pointer;display:grid;place-items:center;}
+  .pinpad button:active{background:var(--accent);border-color:var(--accent);}
+  .pinpad button.ghost{background:none;border:none;font-size:1rem;color:var(--muted);}
+  .pinpad button.ghost:active{background:none;color:var(--accent);}
+  .gate .linkbtn{display:inline-block;margin-top:22px;font-size:.95rem;}
+  @keyframes shake{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}30%,50%,70%{transform:translateX(-8px)}40%,60%{transform:translateX(8px)}}
+  .shake{animation:shake .4s;}
+
+  /* header profile chip */
+  .me-chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 10px 5px 6px;cursor:pointer;font:inherit;color:var(--fg);}
+  .me-chip .av{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:.95rem;color:#fff;}
+  .me-chip .lbl{font-weight:600;font-size:.82rem;}
+  .me-chip .caret{color:var(--muted);font-size:.7rem;}
+  .you-badge{display:inline-block;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+  .bal{transition:transform .12s,border-color .12s;} .bal:hover{transform:translateY(-2px);}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;} .shake{animation:none;}}
 </style>
 </head>
 <body>
+
+<div id="gate" class="gate">
+  <div class="gate-inner">
+    <div class="gate-brand">Split Four Ways</div>
+    <h2>Who's paying?</h2>
+    <p class="gate-sub">Pick your profile — it personalizes the app to you.</p>
+    <div class="profiles" id="gateProfiles"></div>
+  </div>
+</div>
+
+<div id="pinOverlay" class="gate" hidden>
+  <div class="gate-inner">
+    <div class="profiles" style="margin-bottom:6px"><div class="profile" style="cursor:default"><div class="av" id="pinAvatar"></div><div class="nm" id="pinName"></div></div></div>
+    <h2 id="pinTitle" style="font-size:1.5rem">Enter your PIN</h2>
+    <div class="pin-dots" id="pinDots"></div>
+    <div class="pin-err" id="pinErr"></div>
+    <div class="pinpad" id="pinpad"></div>
+    <div><button type="button" class="linkbtn" id="pinBack">‹ Back to profiles</button></div>
+    <div><button type="button" class="linkbtn" id="pinSkip" hidden>Skip — no PIN</button></div>
+  </div>
+</div>
+
 <div class="wrap">
   <header class="top">
     <h1>Split Four Ways</h1>
     <div class="total">
+      <button type="button" class="me-chip" id="meChip" hidden>
+        <span class="av" id="meAv"></span><span class="lbl" id="meLbl"></span><span class="caret">▾</span>
+      </button>
       <div class="label" id="totalLabel">Total spent</div>
       <div class="val num" id="totalSpent">—</div>
       <select class="cur-top" id="currencyTop" aria-label="Currency"></select>
@@ -672,7 +733,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     var list=monthExpenses();
     if(!list.length){ card.hidden=true; return; }
     card.hidden=false;
-    el("catHead").textContent = monthFilter==="all" ? "By category — all time" : "By category — "+monthLabel(monthFilter);
+    el("catHead").textContent = monthFilter==="all" ? "Browse by category — all time" : "Browse by category — "+monthLabel(monthFilter);
     var tot={}, grand=0;
     list.forEach(function(e){ var c=e.category||"Other"; tot[c]=(tot[c]||0)+e.amountMinor; grand+=e.amountMinor; });
     var rows=Object.keys(tot).map(function(c){ return {c:c, v:tot[c]}; }).sort(function(a,b){ return b.v-a.v; });
@@ -719,6 +780,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     people.forEach(function(p){ var v=b[p.id]||0; var c=document.createElement("button");
       c.type="button"; c.className="bal"+(v>0?" pos":v<0?" neg":""); c.setAttribute("aria-label","View "+p.name+"'s spending");
       var nm=document.createElement("div"); nm.className="nm"; nm.textContent=p.name;
+      if(p.id===me){ var yb=document.createElement("span"); yb.className="you-badge"; yb.textContent="You"; nm.appendChild(yb); }
       var val=document.createElement("div"); val.className="v num"; val.textContent=fmt(v);
       var st=document.createElement("div"); st.className="st"; st.textContent=v>0?"is owed":v<0?"owes":"settled up";
       var more=document.createElement("div"); more.className="more"; more.textContent="View spending →";
@@ -957,8 +1019,11 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function afterData(){ people.sort(function(a,b){return (a.order||0)-(b.order||0);});
     orderIdx={}; people.forEach(function(p){ orderIdx[p.id]=p.order||0; });
     var sig=JSON.stringify(people);
-    if(sig!==peopleSig && !focusWithin("peopleSettings") && !focusWithin("addForm")){ peopleSig=sig; renderPeopleControls(); }
-    else if(!peopleSig){ peopleSig=sig; renderPeopleControls(); }
+    if(sig!==peopleSig && !focusWithin("peopleSettings") && !focusWithin("addForm")){ peopleSig=sig; renderPeopleControls(); applyMeDefaults(); }
+    else if(!peopleSig){ peopleSig=sig; renderPeopleControls(); applyMeDefaults(); }
+    initGateOnce();
+    if(!el("gate").hidden) renderGate();
+    renderMeChip();
     render(); }
 
   function applyData(d){ currency=d.currency||"₹"; syncCurrencyUI();
@@ -1340,6 +1405,91 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     closeEdit();
   });
   document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("editOverlay").hidden) closeEdit(); });
+
+  /* ---------- Netflix profile gate + PIN ---------- */
+  var me = null, gateInited = false;
+  var AV_COLORS = ["#d9534f","#2d7fd4","#d98a3a","#3fae5a","#8e44ad","#16a085","#c0392b","#2c82c9"];
+  var PIN_KEY = "split4_pins_v1", ME_KEY = "split4_me_v1";
+  function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"{}")||{}; }catch(_){ return {}; } }
+  function savePins(o){ try{ localStorage.setItem(PIN_KEY, JSON.stringify(o)); }catch(_){} }
+  function pinFor(id){ var p=loadPins(); return (p[id]&&/^\d{4}$/.test(p[id]))?p[id]:""; }
+  function setPinLocal(id,pin){ var p=loadPins(); p[id]=pin; savePins(p); }
+  function colorIdx(id){ for(var i=0;i<people.length;i++) if(people[i].id===id) return i; return 0; }
+  function colorFor(id){ return AV_COLORS[colorIdx(id)%AV_COLORS.length]; }
+  function initial(name){ return (name||"?").trim().charAt(0).toUpperCase()||"?"; }
+
+  function renderGate(){ var box=el("gateProfiles"); if(!box) return; box.textContent="";
+    people.forEach(function(p){
+      var b=document.createElement("button"); b.type="button"; b.className="profile";
+      var av=document.createElement("div"); av.className="av"; av.style.background=colorFor(p.id); av.textContent=initial(p.name);
+      if(pinFor(p.id)){ var lk=document.createElement("span"); lk.className="lock"; lk.textContent="🔒"; av.appendChild(lk); }
+      var nm=document.createElement("div"); nm.className="nm"; nm.textContent=p.name;
+      b.appendChild(av); b.appendChild(nm);
+      b.addEventListener("click", function(){ openPin(p.id); });
+      box.appendChild(b);
+    });
+  }
+  function openGate(){ renderGate(); el("pinOverlay").hidden=true; el("gate").hidden=false; }
+
+  // PIN flow
+  var pinBuf="", pinMode="enter", pinFirst="", pinTarget=null;
+  function renderDots(){ var d=el("pinDots"); d.textContent=""; for(var i=0;i<4;i++){ var s=document.createElement("div"); s.className="dot"+(i<pinBuf.length?" on":""); d.appendChild(s); } }
+  function buildPinpad(){ var pad=el("pinpad"); if(pad.children.length) return; var keys=["1","2","3","4","5","6","7","8","9","","0","del"];
+    keys.forEach(function(k){ var b=document.createElement("button"); b.type="button";
+      if(k===""){ b.className="ghost"; b.disabled=true; b.textContent=""; }
+      else if(k==="del"){ b.className="ghost"; b.textContent="⌫"; b.setAttribute("aria-label","Delete"); b.addEventListener("click",function(){ pinPress("del"); }); }
+      else { b.textContent=k; b.addEventListener("click",function(){ pinPress(k); }); }
+      pad.appendChild(b); }); }
+  function pinErr(msg){ var e=el("pinErr"); e.textContent=msg||""; var card=el("pinOverlay").querySelector(".gate-inner"); card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake"); }
+  function openPin(id){ pinTarget=id; pinBuf=""; pinFirst="";
+    var p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i];
+    buildPinpad();
+    el("pinAvatar").style.background=colorFor(id); el("pinAvatar").textContent=initial(p?p.name:"?");
+    el("pinName").textContent=p?p.name:"";
+    el("pinErr").textContent="";
+    if(pinFor(id)){ pinMode="enter"; el("pinTitle").textContent="Enter your PIN"; el("pinSkip").hidden=true; }
+    else { pinMode="create"; el("pinTitle").textContent="Create a 4-digit PIN"; el("pinSkip").hidden=false; }
+    renderDots();
+    el("gate").hidden=true; el("pinOverlay").hidden=false;
+  }
+  function pinPress(k){
+    if(k==="del"){ pinBuf=pinBuf.slice(0,-1); renderDots(); return; }
+    if(pinBuf.length>=4) return;
+    pinBuf+=k; renderDots();
+    if(pinBuf.length<4) return;
+    setTimeout(function(){
+      if(pinMode==="enter"){
+        if(pinBuf===pinFor(pinTarget)){ enterApp(pinTarget); }
+        else { pinErr("Wrong PIN"); pinBuf=""; renderDots(); }
+      } else {
+        if(pinFirst===""){ pinFirst=pinBuf; pinBuf=""; el("pinTitle").textContent="Confirm your PIN"; el("pinErr").textContent=""; renderDots(); }
+        else { if(pinBuf===pinFirst){ setPinLocal(pinTarget,pinBuf); enterApp(pinTarget); }
+               else { pinErr("PINs didn't match — try again"); pinFirst=""; pinBuf=""; el("pinTitle").textContent="Create a 4-digit PIN"; renderDots(); } }
+      }
+    }, 120);
+  }
+  function enterApp(id){ me=id; try{ sessionStorage.setItem(ME_KEY, id); }catch(_){}
+    el("gate").hidden=true; el("pinOverlay").hidden=true;
+    renderMeChip(); applyMeDefaults(); render();
+  }
+  function renderMeChip(){ if(!me) return; var p=null; for(var i=0;i<people.length;i++) if(people[i].id===me) p=people[i];
+    if(!p){ return; } var chip=el("meChip"); chip.hidden=false;
+    el("meAv").style.background=colorFor(me); el("meAv").textContent=initial(p.name); el("meLbl").textContent=p.name; }
+  function applyMeDefaults(){ if(me && el("paidBy") && people.some(function(p){return p.id===me;})) el("paidBy").value=me; }
+
+  el("pinBack").addEventListener("click", openGate);
+  el("pinSkip").addEventListener("click", function(){ if(pinTarget) enterApp(pinTarget); });
+  el("meChip").addEventListener("click", openGate);
+  document.addEventListener("keydown", function(ev){ if(el("pinOverlay").hidden) return;
+    if(/^[0-9]$/.test(ev.key)) pinPress(ev.key);
+    else if(ev.key==="Backspace") pinPress("del");
+    else if(ev.key==="Escape") openGate(); });
+
+  function initGateOnce(){ if(gateInited||!people.length) return; gateInited=true;
+    var saved=null; try{ saved=sessionStorage.getItem(ME_KEY); }catch(_){}
+    if(saved && people.some(function(p){return p.id===saved;})){ enterApp(saved); }
+    else { renderGate(); el("gate").hidden=false; }
+  }
 
   /* ---------- boot ---------- */
   if(!CONFIGURED){
