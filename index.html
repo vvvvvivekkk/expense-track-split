@@ -5,30 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Split Four Ways</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap">
 <style>
-  /* Layout: single receipt-width column; who-owes-whom on top, entry + ledger below */
+  /* Netflix-style single dark theme: near-black ground, red accent, condensed display type.
+     Layout: single column; who-owes-whom on top, entry + ledger below. */
   :root {
-    --bg:#f3f0e9; --surface:#fff; --surface-2:#faf8f3; --fg:#211f1b; --muted:#726c61; --faint:#9a9488;
-    --border:#e3ddd2; --accent:#335ccf; --accent-ink:#fff; --accent-soft:#e7ecfb;
-    --pos:#1f8a5b; --neg:#c14a2c; --neg-soft:#f7e4dc;
-    --shadow:0 1px 2px rgba(33,31,27,.05),0 8px 24px rgba(33,31,27,.05); --r:14px;
+    --bg:#141414; --surface:#1b1b1b; --surface-2:#262626; --fg:#ffffff; --muted:#b3b3b3; --faint:#7a7a7a;
+    --border:#2e2e2e; --accent:#e50914; --accent-ink:#ffffff; --accent-soft:#2b1316;
+    --pos:#46d369; --pos-soft:#14301f; --neg:#ff5b5b; --neg-soft:#331518;
+    --shadow:0 2px 6px rgba(0,0,0,.5),0 12px 30px rgba(0,0,0,.55); --r:10px;
     --sans:"Hanken Grotesk",system-ui,-apple-system,sans-serif;
-    --display:"Bricolage Grotesque","Hanken Grotesk",system-ui,sans-serif;
+    --display:"Oswald","Hanken Grotesk",system-ui,sans-serif;
     --mono:"Spline Sans Mono",ui-monospace,"SF Mono",Menlo,monospace;
-    color-scheme:light;
-  }
-  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
-    --bg:#17161a; --surface:#201f24; --surface-2:#26252b; --fg:#efece6; --muted:#a39d92; --faint:#807a70;
-    --border:#343139; --accent:#8aa0f5; --accent-ink:#15151a; --accent-soft:#272a3a;
-    --pos:#52c48c; --neg:#e8775a; --neg-soft:#35241f;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
-  }}
-  :root[data-theme="dark"]{
-    --bg:#17161a; --surface:#201f24; --surface-2:#26252b; --fg:#efece6; --muted:#a39d92; --faint:#807a70;
-    --border:#343139; --accent:#8aa0f5; --accent-ink:#15151a; --accent-soft:#272a3a;
-    --pos:#52c48c; --neg:#e8775a; --neg-soft:#35241f;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
+    color-scheme:dark;
   }
 
   *{box-sizing:border-box;}
@@ -41,10 +30,11 @@
   .num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
 
   header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px;}
-  header.top h1{font-family:var(--display);font-weight:700;font-size:clamp(1.9rem,6vw,2.5rem);letter-spacing:-.02em;margin:0;text-wrap:balance;}
-  .total{text-align:right;}
+  header.top h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,7vw,2.8rem);letter-spacing:.01em;text-transform:uppercase;color:var(--accent);margin:0;text-wrap:balance;line-height:.95;}
+  .total{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
   .total .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);}
   .total .val{font-size:1.15rem;font-weight:600;}
+  .cur-top{width:auto;min-width:92px;background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-weight:600;font-size:.82rem;-webkit-appearance:none;appearance:none;cursor:pointer;}
 
   section{margin-bottom:22px;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);}
@@ -229,6 +219,30 @@
   .exp .body.editable:hover .desc{color:var(--accent);}
   .exp .body.editable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
 
+  details.filters{margin:0 0 12px;}
+  details.filters>summary{cursor:pointer;color:var(--muted);font-weight:600;font-size:.82rem;list-style:none;padding:6px 2px;display:inline-flex;align-items:center;gap:6px;}
+  details.filters>summary::-webkit-details-marker{display:none;}
+  details.filters>summary .chev{transition:transform .2s;}
+  details.filters[open]>summary .chev{transform:rotate(90deg);}
+  #filterCount{color:var(--accent);font-weight:700;}
+  .filter-grid{margin-top:8px;display:grid;gap:12px;}
+  .filter-grid .fld{margin-bottom:0;}
+  .frange{display:flex;gap:8px;} .frange .amount-field{flex:1;}
+  .frange .amount-field input{padding-left:28px;font-family:var(--mono);}
+
+  /* per-person charts in profile */
+  .pf-chart{margin-bottom:18px;}
+  .pf-bars{display:flex;flex-direction:column;gap:7px;}
+  .pf-bar{display:grid;grid-template-columns:70px 1fr auto;align-items:center;gap:9px;}
+  .pf-bar .k{font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pf-bar .track{height:9px;border-radius:999px;background:var(--surface-2);overflow:hidden;}
+  .pf-bar .fill{height:100%;border-radius:999px;background:var(--accent);}
+  .pf-bar .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.8rem;font-weight:600;}
+  .pf-spark{display:flex;align-items:flex-end;gap:5px;height:72px;padding-top:6px;}
+  .pf-spark .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;justify-content:flex-end;height:100%;}
+  .pf-spark .bar{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;}
+  .pf-spark .lab{font-size:.6rem;color:var(--muted);white-space:nowrap;}
+
   .inv-actions{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
   .ghostbtn{background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;}
   .ghostbtn:hover{border-color:var(--accent);}
@@ -276,6 +290,7 @@
     <div class="total">
       <div class="label" id="totalLabel">Total spent</div>
       <div class="val num" id="totalSpent">—</div>
+      <select class="cur-top" id="currencyTop" aria-label="Currency"></select>
     </div>
   </header>
 
@@ -349,6 +364,21 @@
       <p class="eyebrow">Expenses</p>
       <select class="month-sel" id="monthSel" aria-label="Filter by month"></select>
     </div>
+    <details class="filters" id="filtersBox">
+      <summary><span class="chev">›</span> Filters <span id="filterCount"></span></summary>
+      <div class="card card-pad filter-grid">
+        <label class="fld"><span class="lab">Category</span><select id="fCat"></select></label>
+        <label class="fld"><span class="lab">Person</span><select id="fPerson"></select></label>
+        <div class="fld">
+          <span class="lab">Amount range</span>
+          <div class="frange">
+            <span class="amount-field"><span class="cur" id="fMinCur">₹</span><input id="fMin" type="text" inputmode="decimal" placeholder="Min" aria-label="Min amount"></span>
+            <span class="amount-field"><span class="cur" id="fMaxCur">₹</span><input id="fMax" type="text" inputmode="decimal" placeholder="Max" aria-label="Max amount"></span>
+          </div>
+        </div>
+        <button type="button" class="ghostbtn" id="fClear">Clear filters</button>
+      </div>
+    </details>
     <div class="card card-pad catcard" id="catCard" hidden>
       <p class="eyebrow" id="catHead">By category</p>
       <div id="catBreakdown"></div>
@@ -385,14 +415,7 @@
           <button type="button" id="addPersonBtn">Add</button>
         </div>
         <p class="eyebrow">Currency</p>
-        <select id="currency" style="max-width:220px">
-          <option value="₹">₹  Rupee (INR)</option>
-          <option value="NT$">NT$  Taiwan dollar</option>
-          <option value="$">$  Dollar</option>
-          <option value="€">€  Euro</option>
-          <option value="£">£  Pound</option>
-          <option value="¥">¥  Yen / Yuan</option>
-        </select>
+        <select id="currency" style="max-width:240px"></select>
       </div>
     </details>
   </section>
@@ -408,6 +431,7 @@
       <button class="pf-close" id="pfClose" aria-label="Close">&times;</button>
     </div>
     <div class="pf-stats" id="pfStats"></div>
+    <div id="pfCharts"></div>
     <div id="pfSettleWrap" hidden>
       <p class="eyebrow" id="pfSettleHead">Settle up</p>
       <div id="pfSettle"></div>
@@ -503,6 +527,19 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var monthFilter = "all";
   var ledgerExpanded = false;
   var LEDGER_PREVIEW = 5;
+  var filt = { cat:"", person:"", min:null, max:null };
+  var CUR_OPTIONS = [["₹","₹ INR"],["NT$","NT$ TWD"],["$","$ USD"],["€","€ EUR"],["£","£ GBP"],["¥","¥ JPY/CNY"]];
+  function fillCurrency(sel, current){ sel.textContent="";
+    var known=false; CUR_OPTIONS.forEach(function(c){ var o=document.createElement("option"); o.value=c[0]; o.textContent=c[1]; if(c[0]===current)known=true; sel.appendChild(o); });
+    if(current && !known){ var o=document.createElement("option"); o.value=current; o.textContent=current; sel.appendChild(o); }
+    sel.value=current||"₹"; }
+  function syncCurrencyUI(){
+    if(el("currency")) el("currency").value=currency;
+    if(el("currencyTop")) el("currencyTop").value=currency;
+    try{ document.querySelectorAll(".cur").forEach(function(s){ s.textContent=currency; }); }catch(_){}
+    try{ if(el("items")&&el("items").children.length) recomputeTotal(ADD_CTX); }catch(_){}
+    try{ if(el("editItems")&&el("editItems").children.length) recomputeTotal(EDIT_CTX); }catch(_){}
+  }
   var CAT_OPTIONS = [
     ["Food","🍽 Food"],["Groceries","🛒 Groceries"],["Dorm","🛏 Dorm"],["Travel","🚕 Travel"],
     ["Rent","🏠 Rent"],["Utilities","💡 Utilities"],["Shopping","🛍 Shopping"],
@@ -579,10 +616,34 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.remove("show"); },2600); }
 
   /* ---------- render ---------- */
-  function render(){ ensureMonths(); renderTotals(); renderSettle(); renderBalances(); renderCategory(); renderLedger(); renderPayments(); }
+  function render(){ ensureMonths(); renderFilters(); renderTotals(); renderSettle(); renderBalances(); renderCategory(); renderLedger(); renderPayments(); }
+
+  function renderFilters(){
+    var cat=el("fCat"); if(cat && !focusWithin("fCat")){ var cv=filt.cat; cat.textContent="";
+      var a=document.createElement("option"); a.value=""; a.textContent="All categories"; cat.appendChild(a);
+      CAT_OPTIONS.forEach(function(c){ var o=document.createElement("option"); o.value=c[0]; o.textContent=c[1]; cat.appendChild(o); });
+      cat.value=cv; }
+    var per=el("fPerson"); if(per && !focusWithin("fPerson")){ var pv=filt.person; per.textContent="";
+      var a2=document.createElement("option"); a2.value=""; a2.textContent="All people"; per.appendChild(a2);
+      people.forEach(function(p){ var o=document.createElement("option"); o.value=p.id; o.textContent=p.name; per.appendChild(o); });
+      if(people.some(function(p){return p.id===pv;})) per.value=pv; else { filt.person=""; per.value=""; } }
+    var n=0; if(filt.cat)n++; if(filt.person)n++; if(filt.min!=null)n++; if(filt.max!=null)n++;
+    el("filterCount").textContent = n?"("+n+")":"";
+  }
 
   function monthExpenses(){ if(monthFilter==="all") return expenses;
     return expenses.filter(function(e){ return monthOf(e)===monthFilter; }); }
+
+  function filtersActive(){ return !!(filt.cat||filt.person||filt.min!=null||filt.max!=null); }
+  // apply the Filters panel (category / person / amount range) to a list
+  function applyFilters(list){ if(!filtersActive()) return list;
+    return list.filter(function(e){
+      if(filt.cat && (e.category||"")!==filt.cat) return false;
+      if(filt.person && !(e.paidBy===filt.person || (e.splitAmong||[]).indexOf(filt.person)>=0)) return false;
+      if(filt.min!=null && e.amountMinor<filt.min) return false;
+      if(filt.max!=null && e.amountMinor>filt.max) return false;
+      return true;
+    }); }
 
   function renderTotals(){ var list=monthExpenses();
     var t=list.reduce(function(s,e){return s+e.amountMinor;},0);
@@ -686,6 +747,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var vv=document.createElement("div"); vv.className="vv num"; vv.textContent=s[1];
       d.appendChild(k); d.appendChild(vv); stats.appendChild(d); });
 
+    renderProfileCharts(id);
+
     // Person-to-person settle-up: who should pay whom, netted
     var pw=pairwise(id);
     var wrap=el("pfSettle"); wrap.textContent="";
@@ -743,6 +806,47 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     try{ document.body.style.overflow="hidden"; }catch(_){}
     el("pfClose").focus();
   }
+  // Per-person charts: their SHARE by category + by month
+  function renderProfileCharts(id){
+    var box=el("pfCharts"); box.textContent="";
+    var byCat={}, byMonth={}, any=false;
+    expenses.forEach(function(e){
+      var members=(e.splitAmong||[]).filter(function(x){ return people.some(function(q){return q.id===x;}); });
+      if(members.indexOf(id)<0) return;
+      var mine=shares(e.amountMinor,members)[id]||0; if(!mine) return; any=true;
+      var c=e.category||"Other"; byCat[c]=(byCat[c]||0)+mine;
+      var m=monthOf(e); byMonth[m]=(byMonth[m]||0)+mine;
+    });
+    if(!any) return;
+
+    // by category (bars)
+    var cats=Object.keys(byCat).map(function(c){return {k:c,v:byCat[c]};}).sort(function(a,b){return b.v-a.v;});
+    var cmax=cats.reduce(function(m,r){return Math.max(m,r.v);},1);
+    var sec1=document.createElement("div"); sec1.className="pf-chart";
+    var e1=document.createElement("p"); e1.className="eyebrow"; e1.textContent="Their spending by category"; sec1.appendChild(e1);
+    var bars=document.createElement("div"); bars.className="pf-bars";
+    cats.forEach(function(r){ var row=document.createElement("div"); row.className="pf-bar";
+      var k=document.createElement("div"); k.className="k"; k.textContent=r.k;
+      var track=document.createElement("div"); track.className="track"; var fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.max(4,Math.round(r.v/cmax*100))+"%"; track.appendChild(fill);
+      var v=document.createElement("div"); v.className="v"; v.textContent=fmt(r.v);
+      row.appendChild(k); row.appendChild(track); row.appendChild(v); bars.appendChild(row); });
+    sec1.appendChild(bars); box.appendChild(sec1);
+
+    // by month (spark columns) — last 6 months present
+    var months=Object.keys(byMonth).sort(); if(months.length>6) months=months.slice(months.length-6);
+    if(months.length>=2){
+      var mmax=months.reduce(function(m,k){return Math.max(m,byMonth[k]);},1);
+      var sec2=document.createElement("div"); sec2.className="pf-chart";
+      var e2=document.createElement("p"); e2.className="eyebrow"; e2.textContent="Their spending by month"; sec2.appendChild(e2);
+      var sp=document.createElement("div"); sp.className="pf-spark";
+      months.forEach(function(k){ var col=document.createElement("div"); col.className="col";
+        var bar=document.createElement("div"); bar.className="bar"; bar.style.height=Math.max(2,Math.round(byMonth[k]/mmax*56))+"px"; bar.title=fmt(byMonth[k]);
+        var lab=document.createElement("div"); lab.className="lab"; lab.textContent=new Date(k+"-01T00:00:00").toLocaleDateString(undefined,{month:"short"});
+        col.appendChild(bar); col.appendChild(lab); sp.appendChild(col); });
+      sec2.appendChild(sp); box.appendChild(sec2);
+    }
+  }
+
   function closeProfile(){ el("profileOverlay").hidden=true; try{ document.body.style.overflow=""; }catch(_){} }
   el("pfClose").addEventListener("click", closeProfile);
   el("profileOverlay").addEventListener("click", function(ev){ if(ev.target===el("profileOverlay")) closeProfile(); });
@@ -753,8 +857,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   function renderLedger(){ var list=el("expenseList"); list.textContent="";
     if(!ready){ list.innerHTML='<p class="empty">Loading…</p>'; return; }
-    var all=monthExpenses();
-    if(!all.length){ list.innerHTML='<p class="empty">'+(expenses.length?"Nothing in "+monthLabel(monthFilter)+".":"No expenses yet. Add the first one above.")+'</p>'; return; }
+    var all=applyFilters(monthExpenses());
+    if(!all.length){ list.innerHTML='<p class="empty">'+(expenses.length?(filtersActive()?"No expenses match the filters.":"Nothing in "+monthLabel(monthFilter)+"."):"No expenses yet. Add the first one above.")+'</p>'; return; }
     var sorted=all.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);});
     var shown = (ledgerExpanded || sorted.length<=LEDGER_PREVIEW) ? sorted : sorted.slice(0,LEDGER_PREVIEW);
     shown.forEach(function(e){
@@ -851,7 +955,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     else if(!peopleSig){ peopleSig=sig; renderPeopleControls(); }
     render(); }
 
-  function applyData(d){ currency=d.currency||"₹"; el("currency").value=currency;
+  function applyData(d){ currency=d.currency||"₹"; syncCurrencyUI();
     people=(d.people||[]).map(function(p){ return {id:String(p.id),name:String(p.name),order:Number(p.order)||0}; });
     expenses=(d.expenses||[]).map(function(e){ return {
       id:String(e.id), desc:String(e.desc||""), amountMinor:Math.round((Number(e.amount)||0)*100),
@@ -883,7 +987,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     if(!CONFIGURED){ return Promise.resolve(localWrite(payload)); }
     busy=true; setSync(true,"Saving…");
     return apiPost(payload).then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); if(okMsg) toast(okMsg); })
-      .catch(function(err){ toast("Couldn't save — "+err.message); setSync(false,"Save failed"); })
+      .catch(function(err){ var m=String(err&&err.message||"");
+        if(/unknown action/i.test(m)){ toast("Update your Apps Script: redeploy the latest Code.gs (Manage deployments → Edit → Deploy)."); }
+        else { toast("Couldn't save — "+m); }
+        setSync(false,"Save failed"); })
       .then(function(){ busy=false; }); }
 
   function deleteExpense(id){ withServer({action:"deleteExpense",id:id}); }
@@ -895,7 +1002,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     if(used){ toast("Can't remove — they're in an expense."); return; }
     if(people.length<=1){ toast("Keep at least one person."); return; }
     withServer({action:"removePerson",id:id}); }
-  function setCurrency(c){ currency=c; render(); withServer({action:"setCurrency",currency:c}); }
+  function setCurrency(c){ currency=c; syncCurrencyUI(); render(); withServer({action:"setCurrency",currency:c}); }
   function recordPayment(from,to,amtMinor,note){
     if(!(amtMinor>0)){ toast("Enter an amount."); return; }
     withServer({action:"addSettlement",from:from,to:to,amount:amtMinor/100,date:todayStr(),note:note||""}, "Payment recorded"); }
@@ -982,6 +1089,13 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   el("monthSel").addEventListener("change", function(){ monthFilter=el("monthSel").value; ledgerExpanded=false; renderTotals(); renderCategory(); renderLedger(); });
 
+  function applyFilterInputs(){ ledgerExpanded=false; renderFilters(); renderLedger(); }
+  el("fCat").addEventListener("change", function(){ filt.cat=el("fCat").value; applyFilterInputs(); });
+  el("fPerson").addEventListener("change", function(){ filt.person=el("fPerson").value; applyFilterInputs(); });
+  el("fMin").addEventListener("input", function(){ var v=parseAmount(el("fMin").value); filt.min=(v>0?v:null); applyFilterInputs(); });
+  el("fMax").addEventListener("input", function(){ var v=parseAmount(el("fMax").value); filt.max=(v>0?v:null); applyFilterInputs(); });
+  el("fClear").addEventListener("click", function(){ filt={cat:"",person:"",min:null,max:null}; el("fMin").value=""; el("fMax").value=""; el("fCat").value=""; el("fPerson").value=""; applyFilterInputs(); });
+
   function buildSummary(){
     var tx=settlements(balances());
     var lines=["Split Four Ways — who owes whom"];
@@ -1002,9 +1116,12 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   el("addPersonBtn").addEventListener("click", function(){ var v=el("newPerson").value.trim(); if(!v){ el("newPerson").focus(); return; } addPerson(v); el("newPerson").value=""; });
   el("newPerson").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); el("addPersonBtn").click(); } });
   el("currency").addEventListener("change", function(){ setCurrency(el("currency").value); });
+  el("currencyTop").addEventListener("change", function(){ setCurrency(el("currencyTop").value); });
 
   el("date").value = todayStr();
   fillCategories(el("category"), "Food");
+  fillCurrency(el("currency"), currency);
+  fillCurrency(el("currencyTop"), currency);
   resetItems(ADD_CTX);
 
   /* ---------- invoice ---------- */
