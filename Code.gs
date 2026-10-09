@@ -46,6 +46,7 @@ function doPost(e) {
 
     switch (body.action) {
       case "addExpense":      addExpense_(body); break;
+      case "updateExpense":   updateExpense_(body); break;
       case "deleteExpense":   deleteRowById_(EXPENSE_TAB, EXPENSE_HEADERS, body.id); break;
       case "addPerson":       addPerson_(body.name); break;
       case "renamePerson":    renamePerson_(body.id, body.name); break;
@@ -82,7 +83,7 @@ function loadAll_() {
       paidBy: String(r.paidBy || ""),
       splitAmong: String(r.splitAmong || "").split(",").map(trim_).filter(Boolean),
       category: String(r.category || ""),
-      date: String(r.date || ""),
+      date: toYmd_(r.date),
       items: parseItems_(r.items),
       createdAt: Number(r.createdAt) || 0
     };
@@ -94,7 +95,7 @@ function loadAll_() {
       from: String(r.from || ""),
       to: String(r.to || ""),
       amount: Number(r.amount) || 0,
-      date: String(r.date || ""),
+      date: toYmd_(r.date),
       note: String(r.note || ""),
       createdAt: Number(r.createdAt) || 0
     };
@@ -139,10 +140,46 @@ function addExpense_(b) {
     paidBy: String(b.paidBy || ""),
     splitAmong: among.join(","),
     category: String(b.category || "").slice(0, 40),
-    date: String(b.date || "").slice(0, 10),
+    date: dateText_(b.date),
     items: items.length ? JSON.stringify(items) : "",
     createdAt: Date.now()
   });
+}
+
+// Edit an existing expense in place (id required); only provided fields change.
+function updateExpense_(b) {
+  if (!b.id) throw new Error("id required");
+  var sh = getOrCreate_(EXPENSE_TAB, EXPENSE_HEADERS);
+  var r = findRow_(sh, b.id);
+  if (r < 0) throw new Error("expense not found");
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var cur = sh.getRange(r, 1, 1, head.length).getValues()[0];
+  var obj = {};
+  for (var i = 0; i < head.length; i++) obj[head[i]] = cur[i];
+
+  if (b.desc !== undefined) obj.desc = String(b.desc || "").slice(0, 200);
+  if (b.amount !== undefined) {
+    var amt = Number(b.amount);
+    if (!(amt > 0)) throw new Error("amount must be greater than zero");
+    obj.amount = amt;
+  }
+  if (b.paidBy !== undefined) obj.paidBy = String(b.paidBy || "");
+  if (b.splitAmong !== undefined) {
+    var among = (b.splitAmong || []).map(String).filter(Boolean);
+    if (among.length === 0) throw new Error("splitAmong is empty");
+    obj.splitAmong = among.join(",");
+  }
+  if (b.category !== undefined) obj.category = String(b.category || "").slice(0, 40);
+  if (b.date !== undefined) obj.date = dateText_(b.date);
+  if (b.items !== undefined) {
+    var items = Array.isArray(b.items)
+      ? b.items.map(function (it) { return { name: String(it.name || "").slice(0, 100), amount: Number(it.amount) || 0 }; })
+               .filter(function (it) { return it.amount > 0 || it.name; })
+      : [];
+    obj.items = items.length ? JSON.stringify(items) : "";
+  }
+  var row = head.map(function (h) { return obj[h] !== undefined ? obj[h] : ""; });
+  sh.getRange(r, 1, 1, head.length).setValues([row]);
 }
 
 // =========================================================================
@@ -309,6 +346,20 @@ function newId_() {
 }
 
 function trim_(s) { return String(s).trim(); }
+
+// Normalize a date CELL to "YYYY-MM-DD" on READ. Google Sheets often coerces
+// a "2026-10-08" string into a real Date value, so getValues returns a Date;
+// convert it back in the spreadsheet's own timezone so the chosen day sticks.
+function toYmd_(v) {
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, ss_().getSpreadsheetTimeZone(), "yyyy-MM-dd");
+  }
+  return String(v || "").slice(0, 10);
+}
+
+// What we write for a date: a plain YYYY-MM-DD string (Sheets may store it as a
+// Date; toYmd_ normalizes it back on read either way).
+function dateText_(v) { return String(v || "").slice(0, 10); }
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);

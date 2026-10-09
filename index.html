@@ -225,6 +225,9 @@
 
   .invoice-open{width:100%;margin-top:10px;background:var(--surface);border:1px solid var(--border);color:var(--fg);border-radius:var(--r);padding:12px;font:inherit;font-weight:600;cursor:pointer;box-shadow:var(--shadow);}
   .invoice-open:hover{border-color:var(--accent);}
+  .exp .body.editable{cursor:pointer;border-radius:8px;}
+  .exp .body.editable:hover .desc{color:var(--accent);}
+  .exp .body.editable:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
 
   .inv-actions{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
   .ghostbtn{background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;}
@@ -317,16 +320,7 @@
         <div class="two">
           <label class="fld" for="category">
             <span class="lab">Category</span>
-            <select id="category">
-              <option value="Food">🍽 Food</option>
-              <option value="Groceries">🛒 Groceries</option>
-              <option value="Travel">🚕 Travel</option>
-              <option value="Rent">🏠 Rent</option>
-              <option value="Utilities">💡 Utilities</option>
-              <option value="Shopping">🛍 Shopping</option>
-              <option value="Entertainment">🎬 Entertainment</option>
-              <option value="Other">• Other</option>
-            </select>
+            <select id="category"></select>
           </label>
           <label class="fld" for="date">
             <span class="lab">Date</span>
@@ -458,6 +452,39 @@
   </div>
 </div>
 
+<div id="editOverlay" class="overlay" hidden>
+  <div class="sheet card" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+    <div class="sheet-head">
+      <h2 class="pf-name" id="editTitle">Edit expense</h2>
+      <button class="pf-close" id="editClose" aria-label="Close">&times;</button>
+    </div>
+    <form id="editForm" autocomplete="off">
+      <label class="fld" for="editDesc"><span class="lab">What for</span>
+        <input id="editDesc" type="text" placeholder="Dinner, groceries, cab…" required></label>
+      <div class="fld">
+        <div class="split-head"><span class="lab">Items</span>
+          <button type="button" class="linkbtn" id="editAddItem">+ Add item</button></div>
+        <div class="items" id="editItems"></div>
+        <div class="items-foot"><span class="items-total">Total<span class="n" id="editItemsTotal">₹0.00</span></span></div>
+      </div>
+      <div class="two">
+        <label class="fld" for="editCategory"><span class="lab">Category</span><select id="editCategory"></select></label>
+        <label class="fld" for="editDate"><span class="lab">Date</span><input id="editDate" type="date"></label>
+      </div>
+      <label class="fld" for="editPaidBy"><span class="lab">Paid by</span><select id="editPaidBy"></select></label>
+      <div class="fld">
+        <div class="split-head"><span class="lab">Split between</span>
+          <button type="button" class="linkbtn" id="editToggleAll">Select all</button></div>
+        <div class="chips" id="editSplit"></div>
+      </div>
+      <div class="inv-actions">
+        <button type="button" class="ghostbtn" id="editDelete" style="color:var(--neg);border-color:var(--neg)">Delete</button>
+        <button type="submit" class="primary inv-pdf" id="editSave">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    CONFIG — paste your Google Apps Script Web App URL here (ends in /exec)
@@ -476,7 +503,17 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var monthFilter = "all";
   var ledgerExpanded = false;
   var LEDGER_PREVIEW = 5;
-  var CATEGORIES = ["Food","Groceries","Travel","Rent","Utilities","Shopping","Entertainment","Other"];
+  var CAT_OPTIONS = [
+    ["Food","🍽 Food"],["Groceries","🛒 Groceries"],["Dorm","🛏 Dorm"],["Travel","🚕 Travel"],
+    ["Rent","🏠 Rent"],["Utilities","💡 Utilities"],["Shopping","🛍 Shopping"],
+    ["Entertainment","🎬 Entertainment"],["Other","• Other"]
+  ];
+  function fillCategories(sel, current){ sel.textContent="";
+    var known=false;
+    CAT_OPTIONS.forEach(function(c){ var o=document.createElement("option"); o.value=c[0]; o.textContent=c[1]; if(c[0]===current) known=true; sel.appendChild(o); });
+    if(current && !known){ var o=document.createElement("option"); o.value=current; o.textContent=current; sel.appendChild(o); }
+    sel.value = current || "Food";
+  }
 
   function el(id){ return document.getElementById(id); }
   function fmt(minor){ var n=minor<0; minor=Math.abs(minor);
@@ -723,7 +760,9 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     shown.forEach(function(e){
       var members=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
       var row=document.createElement("div"); row.className="exp";
-      var body=document.createElement("div"); body.className="body";
+      var body=document.createElement("div"); body.className="body editable"; body.setAttribute("role","button"); body.setAttribute("tabindex","0"); body.setAttribute("aria-label","Edit "+(e.desc||"expense"));
+      body.addEventListener("click", function(){ openEdit(e.id); });
+      body.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openEdit(e.id); } });
       var desc=document.createElement("div"); desc.className="desc"; desc.textContent=e.desc||"Expense";
       if(e.category){ var bdg=document.createElement("span"); bdg.className="cat-badge"; bdg.textContent=e.category; desc.appendChild(bdg); }
       var meta=document.createElement("div"); meta.className="meta";
@@ -848,6 +887,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       .then(function(){ busy=false; }); }
 
   function deleteExpense(id){ withServer({action:"deleteExpense",id:id}); }
+  function updateExpense(payload, okMsg){ payload.action="updateExpense"; return withServer(payload, okMsg||"Expense updated"); }
   function renamePerson(id,name){ withServer({action:"renamePerson",id:id,name:name}); }
   function addPerson(name){ withServer({action:"addPerson",name:name},"Added "+name); }
   function removePerson(id){
@@ -866,6 +906,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   /* ---------- local fallback (only if API_URL not set) ---------- */
   function localWrite(p){ var d=loadLocal(); d.settlements=d.settlements||[];
     if(p.action==="addExpense"){ d.expenses.push({id:lid(),desc:p.desc,amount:p.amount,paidBy:p.paidBy,splitAmong:p.splitAmong,category:p.category||"",date:p.date||"",items:p.items||[],createdAt:Date.now()}); }
+    else if(p.action==="updateExpense"){ d.expenses.forEach(function(x){ if(x.id===p.id){
+      if(p.desc!==undefined)x.desc=p.desc; if(p.amount!==undefined)x.amount=p.amount; if(p.paidBy!==undefined)x.paidBy=p.paidBy;
+      if(p.splitAmong!==undefined)x.splitAmong=p.splitAmong; if(p.category!==undefined)x.category=p.category;
+      if(p.date!==undefined)x.date=p.date; if(p.items!==undefined)x.items=p.items; } }); }
     else if(p.action==="deleteExpense"){ d.expenses=d.expenses.filter(function(x){return x.id!==p.id;}); }
     else if(p.action==="addSettlement"){ d.settlements.push({id:lid(),from:p.from,to:p.to,amount:p.amount,date:p.date||"",note:p.note||"",createdAt:Date.now()}); }
     else if(p.action==="deleteSettlement"){ d.settlements=d.settlements.filter(function(x){return x.id!==p.id;}); }
@@ -879,8 +923,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     return { people:[{id:"p1",name:"Akshay",order:1},{id:"p2",name:"Praney",order:2},{id:"p3",name:"Vivek",order:3},{id:"p4",name:"Logesh",order:4}], expenses:[], settlements:[], currency:"₹" }; }
   function saveLocal(d){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(d)); }catch(_){} }
 
-  /* ---------- itemized entry ---------- */
-  function addItemRow(name, amount){
+  /* ---------- itemized entry (container-aware, shared by add + edit) ---------- */
+  var ADD_CTX={items:"items",total:"itemsTotal",add:"addItem"};
+  var EDIT_CTX={items:"editItems",total:"editItemsTotal",add:"editAddItem"};
+  function addItemRow(ctx, name, amount){
     var row=document.createElement("div"); row.className="item-row";
     var nm=document.createElement("input"); nm.type="text"; nm.className="nm"; nm.placeholder="Item (optional)"; nm.setAttribute("aria-label","Item name"); if(name) nm.value=name;
     var wrap=document.createElement("span"); wrap.className="amt-wrap";
@@ -888,28 +934,34 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     var amt=document.createElement("input"); amt.type="text"; amt.inputMode="decimal"; amt.placeholder="0.00"; amt.setAttribute("aria-label","Item amount"); if(amount) amt.value=amount;
     wrap.appendChild(cur); wrap.appendChild(amt);
     var rm=document.createElement("button"); rm.type="button"; rm.className="rm"; rm.setAttribute("aria-label","Remove item"); rm.textContent="×";
-    rm.addEventListener("click", function(){ if(el("items").children.length>1){ row.remove(); recomputeTotal(); } else { nm.value=""; amt.value=""; recomputeTotal(); } });
-    amt.addEventListener("input", recomputeTotal);
-    amt.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); el("addItem").click(); } });
+    rm.addEventListener("click", function(){ if(el(ctx.items).children.length>1){ row.remove(); recomputeTotal(ctx); } else { nm.value=""; amt.value=""; recomputeTotal(ctx); } });
+    amt.addEventListener("input", function(){ recomputeTotal(ctx); });
+    amt.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); el(ctx.add).click(); } });
     row.appendChild(nm); row.appendChild(wrap); row.appendChild(rm);
-    el("items").appendChild(row); return row;
+    el(ctx.items).appendChild(row); return row;
   }
-  function itemsData(){ var out=[], total=0;
-    Array.prototype.forEach.call(el("items").children, function(row){
+  function itemsData(ctx){ var out=[], total=0;
+    Array.prototype.forEach.call(el(ctx.items).children, function(row){
       var nm=row.querySelector(".nm").value.trim();
       var a=parseAmount(row.querySelector(".amt-wrap input").value);
       if(a>0){ out.push({name:nm, amount:a/100}); total+=a; }
     });
     return {items:out, total:total}; }
-  function recomputeTotal(){ var d=itemsData(); el("itemsTotal").textContent=fmt(d.total); }
-  function resetItems(){ el("items").textContent=""; addItemRow(); recomputeTotal(); }
+  function recomputeTotal(ctx){ var d=itemsData(ctx); el(ctx.total).textContent=fmt(d.total); }
+  function resetItems(ctx){ el(ctx.items).textContent=""; addItemRow(ctx); recomputeTotal(ctx); }
+  function fillItems(ctx, items, fallbackAmountMinor){
+    el(ctx.items).textContent="";
+    if(items && items.length){ items.forEach(function(it){ addItemRow(ctx, it.name||"", it.amount); }); }
+    else { addItemRow(ctx, "", fallbackAmountMinor ? (fallbackAmountMinor/100) : ""); }
+    recomputeTotal(ctx);
+  }
 
   /* ---------- events ---------- */
-  el("addItem").addEventListener("click", function(){ var r=addItemRow(); r.querySelector(".nm").focus(); recomputeTotal(); });
+  el("addItem").addEventListener("click", function(){ var r=addItemRow(ADD_CTX); r.querySelector(".nm").focus(); recomputeTotal(ADD_CTX); });
 
   el("addForm").addEventListener("submit", function(ev){ ev.preventDefault();
     var desc=el("desc").value.trim(), paidBy=el("paidBy").value;
-    var d=itemsData(); var minor=d.total;
+    var d=itemsData(ADD_CTX); var minor=d.total;
     var among=people.filter(function(p){return selected[p.id];}).map(function(p){return p.id;});
     if(!desc){ toast("Add a short description."); el("desc").focus(); return; }
     if(!(minor>0)){ toast("Enter at least one item amount."); return; }
@@ -918,7 +970,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     var date=el("date").value || todayStr();
     withServer({action:"addExpense",desc:desc,amount:minor/100,paidBy:paidBy,splitAmong:among,
                 category:el("category").value,date:date,items:d.items},"Expense added")
-      .then(function(){ el("desc").value=""; resetItems(); el("desc").focus(); }); });
+      .then(function(){ el("desc").value=""; resetItems(ADD_CTX); el("desc").focus(); }); });
 
   el("payBtn").addEventListener("click", function(){
     var from=el("payFrom").value, to=el("payTo").value, amt=parseAmount(el("payAmt").value);
@@ -952,7 +1004,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   el("currency").addEventListener("change", function(){ setCurrency(el("currency").value); });
 
   el("date").value = todayStr();
-  resetItems();
+  fillCategories(el("category"), "Food");
+  resetItems(ADD_CTX);
 
   /* ---------- invoice ---------- */
   var invSelected = {}, invScopeVal = "all";
@@ -1107,6 +1160,63 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     function fb(){ try{ var ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); ok(); }catch(_){ toast("Couldn't copy."); } }
     if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok).catch(fb); } else fb(); });
   document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("invoiceOverlay").hidden) closeInvoice(); });
+
+  /* ---------- edit expense ---------- */
+  var editingId = null, editSelected = {};
+
+  function openEdit(id){
+    var e=null; for(var i=0;i<expenses.length;i++) if(expenses[i].id===id) e=expenses[i];
+    if(!e) return;
+    editingId=id;
+    el("editDesc").value=e.desc||"";
+    fillItems(EDIT_CTX, e.items, e.amountMinor);
+    fillCategories(el("editCategory"), e.category||"Food");
+    el("editDate").value = (e.date && /^\d{4}-\d{2}-\d{2}/.test(e.date)) ? e.date.slice(0,10) : todayStr();
+    // paid by
+    var sel=el("editPaidBy"); sel.textContent="";
+    people.forEach(function(p){ var o=document.createElement("option"); o.value=p.id; o.textContent=p.name; sel.appendChild(o); });
+    if(people.some(function(p){return p.id===e.paidBy;})) sel.value=e.paidBy;
+    // split
+    editSelected={}; people.forEach(function(p){ editSelected[p.id] = (e.splitAmong||[]).indexOf(p.id)>=0; });
+    renderEditSplit();
+    el("editOverlay").hidden=false; try{ document.body.style.overflow="hidden"; }catch(_){}
+    el("editClose").focus();
+  }
+  function closeEdit(){ el("editOverlay").hidden=true; editingId=null; try{ document.body.style.overflow=""; }catch(_){} }
+
+  function renderEditSplit(){ var box=el("editSplit"); box.textContent="";
+    people.forEach(function(p){ var chip=document.createElement("button"); chip.type="button"; chip.className="chip";
+      chip.setAttribute("aria-pressed",String(!!editSelected[p.id]));
+      var tick=document.createElement("span"); tick.className="tick";
+      var lab=document.createElement("span"); lab.textContent=p.name;
+      chip.appendChild(tick); chip.appendChild(lab);
+      chip.addEventListener("click", function(){ editSelected[p.id]=!editSelected[p.id]; chip.setAttribute("aria-pressed",String(editSelected[p.id]));
+        el("editToggleAll").textContent = people.every(function(q){return editSelected[q.id];})?"Clear all":"Select all"; });
+      box.appendChild(chip); });
+    el("editToggleAll").textContent = people.every(function(q){return editSelected[q.id];})?"Clear all":"Select all"; }
+
+  el("editClose").addEventListener("click", closeEdit);
+  el("editOverlay").addEventListener("click", function(ev){ if(ev.target===el("editOverlay")) closeEdit(); });
+  el("editAddItem").addEventListener("click", function(){ var r=addItemRow(EDIT_CTX); r.querySelector(".nm").focus(); recomputeTotal(EDIT_CTX); });
+  el("editToggleAll").addEventListener("click", function(){ var allOn=people.every(function(q){return editSelected[q.id];});
+    people.forEach(function(q){ editSelected[q.id]=!allOn; }); renderEditSplit(); });
+  el("editDelete").addEventListener("click", function(){ var id=editingId; if(!id) return; closeEdit(); deleteExpense(id); });
+  el("editForm").addEventListener("submit", function(ev){ ev.preventDefault();
+    if(!editingId) return;
+    var desc=el("editDesc").value.trim();
+    var d=itemsData(EDIT_CTX); var minor=d.total;
+    var paidBy=el("editPaidBy").value;
+    var among=people.filter(function(p){return editSelected[p.id];}).map(function(p){return p.id;});
+    if(!desc){ toast("Add a short description."); el("editDesc").focus(); return; }
+    if(!(minor>0)){ toast("Enter at least one item amount."); return; }
+    if(!paidBy){ toast("Choose who paid."); return; }
+    if(!among.length){ toast("Pick at least one person to split between."); return; }
+    var date=el("editDate").value || todayStr();
+    var id=editingId;
+    updateExpense({id:id,desc:desc,amount:minor/100,paidBy:paidBy,splitAmong:among,category:el("editCategory").value,date:date,items:d.items});
+    closeEdit();
+  });
+  document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("editOverlay").hidden) closeEdit(); });
 
   /* ---------- boot ---------- */
   if(!CONFIGURED){
