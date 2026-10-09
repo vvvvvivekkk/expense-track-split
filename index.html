@@ -151,6 +151,26 @@
   .pf-exp .share{text-align:right;flex:0 0 auto;font-weight:600;}
   .pf-exp .share .k{display:block;font-size:.68rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
 
+  #pfSettleWrap{margin-bottom:20px;}
+  .pf-set{display:flex;align-items:center;gap:12px;padding:12px 13px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:var(--surface-2);}
+  .pf-set .ic{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-weight:700;font-size:.95rem;}
+  .pf-set.get .ic{background:var(--pos-soft);color:var(--pos);}
+  .pf-set.owe .ic{background:var(--neg-soft);color:var(--neg);}
+  .pf-set.even .ic{background:var(--border);color:var(--muted);}
+  .pf-set .txt{flex:1;min-width:0;}
+  .pf-set .txt .main{font-weight:600;}
+  .pf-set .txt .sub{font-size:.76rem;color:var(--muted);margin-top:1px;}
+  .pf-set .amt{font-weight:700;font-size:1.05rem;flex:0 0 auto;}
+  .pf-set.get .amt{color:var(--pos);}
+  .pf-set.owe .amt{color:var(--neg);}
+  .pf-set.even .amt{color:var(--muted);}
+  .pf-net{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:13px 15px;border-radius:12px;margin-bottom:14px;}
+  .pf-net.get{background:var(--pos-soft);} .pf-net.owe{background:var(--neg-soft);} .pf-net.even{background:var(--surface-2);}
+  .pf-net .lab{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+  .pf-net.get .lab{color:var(--pos);} .pf-net.owe .lab{color:var(--neg);} .pf-net.even .lab{color:var(--muted);}
+  .pf-net .big{font-size:1.5rem;font-weight:700;}
+  .pf-net.get .big{color:var(--pos);} .pf-net.owe .big{color:var(--neg);} .pf-net.even .big{color:var(--muted);}
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
 </head>
@@ -243,6 +263,10 @@
       <button class="pf-close" id="pfClose" aria-label="Close">&times;</button>
     </div>
     <div class="pf-stats" id="pfStats"></div>
+    <div id="pfSettleWrap" hidden>
+      <p class="eyebrow" id="pfSettleHead">Settle up</p>
+      <div id="pfSettle"></div>
+    </div>
     <p class="eyebrow">Expenses they're in</p>
     <div id="pfList"></div>
   </div>
@@ -282,6 +306,25 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var m=(e.splitAmong||[]).filter(function(id){ return b[id]!==undefined; });
       var sh=shares(e.amountMinor,m); m.forEach(function(id){ b[id]-=sh[id]; }); });
     return b; }
+
+  // debt[a][b] = how much a owes b (minor units), netted per pair
+  function debtMatrix(){ var d={};
+    expenses.forEach(function(e){
+      if(!people.some(function(p){return p.id===e.paidBy;})) return;
+      var m=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
+      var sh=shares(e.amountMinor,m);
+      m.forEach(function(id){ if(id===e.paidBy) return;
+        d[id]=d[id]||{}; d[id][e.paidBy]=(d[id][e.paidBy]||0)+sh[id]; });
+    });
+    return d; }
+
+  // For person P: net vs each other person. net>0 => other owes P; net<0 => P owes other.
+  function pairwise(id){ var d=debtMatrix(), out=[];
+    people.forEach(function(q){ if(q.id===id) return;
+      var owesMe=(d[q.id]&&d[q.id][id])||0;   // q owes P
+      var iOwe=(d[id]&&d[id][q.id])||0;        // P owes q
+      out.push({id:q.id, net:owesMe-iOwe}); });
+    return out; }
 
   function settlements(b){ var cred=[],debt=[];
     Object.keys(b).forEach(function(id){ var v=b[id]; if(v>0)cred.push({id:id,amt:v}); else if(v<0)debt.push({id:id,amt:-v}); });
@@ -354,6 +397,42 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var k=document.createElement("div"); k.className="k"; k.textContent=s[0];
       var vv=document.createElement("div"); vv.className="vv num"; vv.textContent=s[1];
       d.appendChild(k); d.appendChild(vv); stats.appendChild(d); });
+
+    // Person-to-person settle-up: who should pay whom, netted
+    var pw=pairwise(id);
+    var wrap=el("pfSettle"); wrap.textContent="";
+    var head=el("pfSettleHead");
+    if(expenses.length){
+      el("pfSettleWrap").hidden=false;
+      // net line (overall)
+      var netLine=document.createElement("div");
+      netLine.className="pf-net "+(net>0?"get":net<0?"owe":"even");
+      var nl=document.createElement("div"); nl.className="lab";
+      nl.textContent = net>0?"Gets back overall":net<0?"Owes overall":"All settled";
+      var nb=document.createElement("div"); nb.className="big num"; nb.textContent=fmt(Math.abs(net));
+      netLine.appendChild(nl); netLine.appendChild(nb); wrap.appendChild(netLine);
+
+      head.textContent = "Person by person";
+      pw.forEach(function(r){
+        var cls = r.net>0?"get":r.net<0?"owe":"even";
+        var row=document.createElement("div"); row.className="pf-set "+cls;
+        var ic=document.createElement("div"); ic.className="ic";
+        ic.textContent = r.net>0?"←":r.net<0?"→":"=";
+        var txt=document.createElement("div"); txt.className="txt";
+        var main=document.createElement("div"); main.className="main";
+        var sub=document.createElement("div"); sub.className="sub";
+        if(r.net>0){ main.textContent=nameOf(r.id)+" owes "+p.name; sub.textContent="they should pay "+p.name; }
+        else if(r.net<0){ main.textContent=p.name+" owes "+nameOf(r.id); sub.textContent=p.name+" should pay them"; }
+        else { main.textContent="Even with "+nameOf(r.id); sub.textContent="nothing to settle"; }
+        txt.appendChild(main); txt.appendChild(sub);
+        var amt=document.createElement("div"); amt.className="amt num";
+        amt.textContent=(r.net<0?"-":"")+fmt(Math.abs(r.net));
+        row.appendChild(ic); row.appendChild(txt); row.appendChild(amt);
+        wrap.appendChild(row);
+      });
+    } else {
+      el("pfSettleWrap").hidden=true;
+    }
 
     var list=el("pfList"); list.textContent="";
     if(!rows.length){ list.innerHTML='<p class="empty">No expenses yet.</p>'; }
