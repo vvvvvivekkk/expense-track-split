@@ -1410,9 +1410,14 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var me = null, gateInited = false;
   var AV_COLORS = ["#d9534f","#2d7fd4","#d98a3a","#3fae5a","#8e44ad","#16a085","#c0392b","#2c82c9"];
   var PIN_KEY = "split4_pins_v1", ME_KEY = "split4_me_v1";
+  // Default PINs per profile (work on every device; a person can override on their own device).
+  var DEFAULT_PINS = { p1:"2005", p2:"3699", p3:"7733", p4:"1234" }; // Akshay, Praney, Vivek, Logesh
   function loadPins(){ try{ return JSON.parse(localStorage.getItem(PIN_KEY)||"{}")||{}; }catch(_){ return {}; } }
   function savePins(o){ try{ localStorage.setItem(PIN_KEY, JSON.stringify(o)); }catch(_){} }
-  function pinFor(id){ var p=loadPins(); return (p[id]&&/^\d{4}$/.test(p[id]))?p[id]:""; }
+  function pinFor(id){ var p=loadPins();
+    if(p[id]&&/^\d{4}$/.test(p[id])) return p[id];
+    if(DEFAULT_PINS[id]&&/^\d{4}$/.test(DEFAULT_PINS[id])) return DEFAULT_PINS[id];
+    return ""; }
   function setPinLocal(id,pin){ var p=loadPins(); p[id]=pin; savePins(p); }
   function colorIdx(id){ for(var i=0;i<people.length;i++) if(people[i].id===id) return i; return 0; }
   function colorFor(id){ return AV_COLORS[colorIdx(id)%AV_COLORS.length]; }
