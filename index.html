@@ -218,6 +218,11 @@
   .manual{display:grid;gap:8px;margin-top:4px;}
   .manual .mrow{display:flex;gap:8px;} .manual .mrow>*{flex:1;min-width:0;}
 
+  .showmore{width:100%;margin-top:8px;background:var(--surface-2);border:1px solid var(--border);color:var(--accent);border-radius:10px;padding:11px;font:inherit;font-weight:600;cursor:pointer;}
+  .showmore:hover{border-color:var(--accent);}
+  #settleCard .toolbar{margin-bottom:12px;}
+  #copySummary.ok{color:var(--pos);}
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
 </head>
@@ -235,7 +240,10 @@
 
   <section id="settleSection">
     <div class="card card-pad" id="settleCard">
-      <p class="eyebrow">Settle up</p>
+      <div class="toolbar">
+        <p class="eyebrow">Settle up</p>
+        <button type="button" class="linkbtn" id="copySummary" hidden>Copy summary</button>
+      </div>
       <div id="settleBody"><p class="empty">Loading…</p></div>
     </div>
   </section>
@@ -390,6 +398,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var people = [], expenses = [], payments = [], currency = "₹";
   var selected = {}, orderIdx = {}, ready = false, busy = false, peopleSig = "";
   var monthFilter = "all";
+  var ledgerExpanded = false;
+  var LEDGER_PREVIEW = 5;
   var CATEGORIES = ["Food","Groceries","Travel","Rent","Utilities","Shopping","Entertainment","Other"];
 
   function el(id){ return document.getElementById(id); }
@@ -494,9 +504,11 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       row.appendChild(nm); row.appendChild(track); row.appendChild(val); box.appendChild(row); }); }
 
   function renderSettle(){ var box=el("settleBody"); box.textContent="";
+    el("copySummary").hidden=true;
     if(!ready){ box.innerHTML='<p class="empty">Loading…</p>'; return; }
     if(!expenses.length){ box.innerHTML='<p class="empty">Add an expense to see who owes whom.</p>'; return; }
     var tx=settlements(balances());
+    el("copySummary").hidden = tx.length===0;
     if(!tx.length){ var d=document.createElement("div"); d.className="allset";
       var dot=document.createElement("span"); dot.className="dot";
       var sp=document.createElement("span"); sp.textContent="All settled up — nobody owes anything.";
@@ -629,7 +641,9 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     if(!ready){ list.innerHTML='<p class="empty">Loading…</p>'; return; }
     var all=monthExpenses();
     if(!all.length){ list.innerHTML='<p class="empty">'+(expenses.length?"Nothing in "+monthLabel(monthFilter)+".":"No expenses yet. Add the first one above.")+'</p>'; return; }
-    all.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);}).forEach(function(e){
+    var sorted=all.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);});
+    var shown = (ledgerExpanded || sorted.length<=LEDGER_PREVIEW) ? sorted : sorted.slice(0,LEDGER_PREVIEW);
+    shown.forEach(function(e){
       var members=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
       var row=document.createElement("div"); row.className="exp";
       var body=document.createElement("div"); body.className="body";
@@ -650,7 +664,14 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
         var ea=document.createElement("div"); ea.className="each num"; ea.textContent=fmt(per)+" each"; right.appendChild(ea); }
       var del=document.createElement("button"); del.className="del"; del.title="Delete"; del.setAttribute("aria-label","Delete expense"); del.textContent="×";
       del.addEventListener("click", function(){ deleteExpense(e.id); });
-      row.appendChild(body); row.appendChild(right); row.appendChild(del); list.appendChild(row); }); }
+      row.appendChild(body); row.appendChild(right); row.appendChild(del); list.appendChild(row); });
+
+    if(sorted.length>LEDGER_PREVIEW){
+      var more=document.createElement("button"); more.type="button"; more.className="showmore";
+      more.textContent = ledgerExpanded ? "Show less" : "Show all "+sorted.length+" expenses";
+      more.addEventListener("click", function(){ ledgerExpanded=!ledgerExpanded; renderLedger(); });
+      list.appendChild(more);
+    } }
 
   /* ---------- payments (settle-ups) ---------- */
   function renderPayments(){
@@ -830,7 +851,22 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     recordPayment(from,to,amt, nameOf(from)+" paid "+nameOf(to));
     el("payAmt").value=""; });
 
-  el("monthSel").addEventListener("change", function(){ monthFilter=el("monthSel").value; renderTotals(); renderCategory(); renderLedger(); });
+  el("monthSel").addEventListener("change", function(){ monthFilter=el("monthSel").value; ledgerExpanded=false; renderTotals(); renderCategory(); renderLedger(); });
+
+  function buildSummary(){
+    var tx=settlements(balances());
+    var lines=["Split Four Ways — who owes whom"];
+    if(!tx.length){ lines.push("All settled up ✓"); }
+    else tx.forEach(function(t){ lines.push(nameOf(t.from)+" → "+nameOf(t.to)+": "+fmt(t.amt)); });
+    return lines.join("\n");
+  }
+  el("copySummary").addEventListener("click", function(){
+    var text=buildSummary(), btn=el("copySummary");
+    function ok(){ btn.textContent="Copied!"; btn.classList.add("ok"); setTimeout(function(){ btn.textContent="Copy summary"; btn.classList.remove("ok"); },1800); }
+    function fallback(){ try{ var ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); ok(); }catch(_){ toast("Couldn't copy — select manually."); } }
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok).catch(fallback); }
+    else fallback();
+  });
 
   el("toggleAll").addEventListener("click", function(){ var allOn=people.length>0&&people.every(function(p){return selected[p.id];});
     people.forEach(function(p){ selected[p.id]=!allOn; }); renderPeopleControls(); });
