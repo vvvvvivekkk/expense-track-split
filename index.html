@@ -223,6 +223,46 @@
   #settleCard .toolbar{margin-bottom:12px;}
   #copySummary.ok{color:var(--pos);}
 
+  .invoice-open{width:100%;margin-top:10px;background:var(--surface);border:1px solid var(--border);color:var(--fg);border-radius:var(--r);padding:12px;font:inherit;font-weight:600;cursor:pointer;box-shadow:var(--shadow);}
+  .invoice-open:hover{border-color:var(--accent);}
+
+  .inv-actions{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .ghostbtn{background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;}
+  .ghostbtn:hover{border-color:var(--accent);}
+  .ghostbtn.ok{color:var(--pos);border-color:var(--pos);}
+  .inv-actions .inv-pdf{width:auto;margin-top:0;flex:1;min-width:120px;padding:10px 14px;}
+
+  /* invoice document — intentionally print-clean (light, bordered) in both themes */
+  #invoiceDoc{background:#fff;color:#1a1a1a;border:1px solid #e3ddd2;border-radius:12px;padding:22px;font-size:13px;}
+  #invoiceDoc .inv-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:14px;flex-wrap:wrap;}
+  #invoiceDoc .inv-brand{font-family:var(--display);font-weight:700;font-size:1.25rem;}
+  #invoiceDoc .inv-meta{text-align:right;font-size:.78rem;color:#666;line-height:1.7;}
+  #invoiceDoc .inv-note{font-size:.85rem;color:#444;margin:-4px 0 14px;}
+  #invoiceDoc .inv-person{border:1px solid #e3ddd2;border-radius:10px;padding:13px 14px;margin-bottom:12px;}
+  #invoiceDoc .inv-person .ip-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;}
+  #invoiceDoc .inv-person .ip-name{font-weight:700;font-size:1.02rem;}
+  #invoiceDoc .inv-person .ip-net{font-weight:700;font-variant-numeric:tabular-nums;}
+  #invoiceDoc .inv-person .ip-net.get{color:#1f8a5b;} #invoiceDoc .inv-person .ip-net.owe{color:#c14a2c;}
+  #invoiceDoc .inv-line{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:.86rem;border-top:1px dashed #eadfce;}
+  #invoiceDoc .inv-line:first-of-type{border-top:0;}
+  #invoiceDoc .inv-line .r{font-variant-numeric:tabular-nums;white-space:nowrap;}
+  #invoiceDoc .inv-line .r.get{color:#1f8a5b;} #invoiceDoc .inv-line .r.owe{color:#c14a2c;}
+  #invoiceDoc .inv-sec{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:#999;margin:18px 0 8px;}
+  #invoiceDoc table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  #invoiceDoc th{text-align:left;color:#999;font-weight:600;text-transform:uppercase;font-size:.66rem;letter-spacing:.05em;padding:6px 6px;border-bottom:1px solid #e3ddd2;}
+  #invoiceDoc td{padding:6px 6px;border-bottom:1px solid #f0e9db;vertical-align:top;}
+  #invoiceDoc td.r,#invoiceDoc th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  #invoiceDoc .inv-foot{margin-top:14px;font-size:.72rem;color:#999;text-align:center;}
+
+  @media print{
+    body{background:#fff!important;padding:0!important;}
+    .wrap,#toast,#profileOverlay,.inv-actions,#invSetup,.sheet-head{display:none!important;}
+    #invoiceOverlay{position:static!important;background:none!important;display:block!important;padding:0!important;}
+    #invoiceOverlay .sheet{max-width:none!important;max-height:none!important;box-shadow:none!important;border:0!important;padding:0!important;overflow:visible!important;border-radius:0!important;}
+    #invResult{display:block!important;}
+    #invoiceDoc{border:0!important;padding:0!important;}
+  }
+
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
 </head>
@@ -251,6 +291,7 @@
   <section>
     <p class="eyebrow">Balances</p>
     <div class="bal-grid" id="balances"></div>
+    <button type="button" class="invoice-open" id="makeInvoice">🧾 Make an invoice</button>
   </section>
 
   <section>
@@ -382,6 +423,41 @@
   </div>
 </div>
 
+<div id="invoiceOverlay" class="overlay" hidden>
+  <div class="sheet card" role="dialog" aria-modal="true" aria-labelledby="invTitle">
+    <div class="sheet-head">
+      <h2 class="pf-name" id="invTitle">Make an invoice</h2>
+      <button class="pf-close" id="invClose" aria-label="Close">&times;</button>
+    </div>
+
+    <div id="invSetup">
+      <label class="fld" for="invScope">
+        <span class="lab">Period</span>
+        <select id="invScope"></select>
+      </label>
+      <div class="fld">
+        <div class="split-head"><span class="lab">Include people</span>
+          <button type="button" class="linkbtn" id="invAll">Select all</button></div>
+        <div class="chips" id="invPeople"></div>
+      </div>
+      <label class="fld" for="invNote">
+        <span class="lab">Note (optional)</span>
+        <input id="invNote" type="text" placeholder="e.g. Goa trip, October rent…">
+      </label>
+      <button type="button" class="primary" id="invGenerate">Generate invoice</button>
+    </div>
+
+    <div id="invResult" hidden>
+      <div class="inv-actions">
+        <button type="button" class="ghostbtn" id="invBack">‹ Edit</button>
+        <button type="button" class="ghostbtn" id="invCopy">Copy text</button>
+        <button type="button" class="primary inv-pdf" id="invPrint">Save as PDF</button>
+      </div>
+      <div id="invoiceDoc"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    CONFIG — paste your Google Apps Script Web App URL here (ends in /exec)
@@ -423,30 +499,31 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function monthLabel(m){ if(m==="all") return "All time";
     var d=new Date(m+"-01T00:00:00"); return d.toLocaleDateString(undefined,{month:"long",year:"numeric"}); }
 
-  function balances(){ var b={}; people.forEach(function(p){ b[p.id]=0; });
-    expenses.forEach(function(e){ if(b[e.paidBy]===undefined) return; b[e.paidBy]+=e.amountMinor;
+  function balances(expList, payList){ expList=expList||expenses; payList=payList||payments;
+    var b={}; people.forEach(function(p){ b[p.id]=0; });
+    expList.forEach(function(e){ if(b[e.paidBy]===undefined) return; b[e.paidBy]+=e.amountMinor;
       var m=(e.splitAmong||[]).filter(function(id){ return b[id]!==undefined; });
       var sh=shares(e.amountMinor,m); m.forEach(function(id){ b[id]-=sh[id]; }); });
     // a payment from->to clears that much of what `from` owes `to`
-    payments.forEach(function(s){ if(b[s.from]===undefined||b[s.to]===undefined) return;
+    payList.forEach(function(s){ if(b[s.from]===undefined||b[s.to]===undefined) return;
       b[s.from]+=s.amountMinor; b[s.to]-=s.amountMinor; });
     return b; }
 
   // debt[a][b] = how much a owes b (minor units), netted per pair
-  function debtMatrix(){ var d={};
+  function debtMatrix(expList, payList){ expList=expList||expenses; payList=payList||payments;
+    var d={};
     function add(a,bb,amt){ d[a]=d[a]||{}; d[a][bb]=(d[a][bb]||0)+amt; }
-    expenses.forEach(function(e){
+    expList.forEach(function(e){
       if(!people.some(function(p){return p.id===e.paidBy;})) return;
       var m=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
       var sh=shares(e.amountMinor,m);
       m.forEach(function(id){ if(id===e.paidBy) return; add(id,e.paidBy,sh[id]); });
     });
-    // payment from->to reduces what `from` owes `to`
-    payments.forEach(function(s){ if(!s.from||!s.to) return; add(s.from,s.to,-s.amountMinor); });
+    payList.forEach(function(s){ if(!s.from||!s.to) return; add(s.from,s.to,-s.amountMinor); });
     return d; }
 
   // For person P: net vs each other person. net>0 => other owes P; net<0 => P owes other.
-  function pairwise(id){ var d=debtMatrix(), out=[];
+  function pairwise(id, expList, payList){ var d=debtMatrix(expList, payList), out=[];
     people.forEach(function(q){ if(q.id===id) return;
       var owesMe=(d[q.id]&&d[q.id][id])||0;   // q owes P
       var iOwe=(d[id]&&d[id][q.id])||0;        // P owes q
@@ -876,6 +953,160 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   el("date").value = todayStr();
   resetItems();
+
+  /* ---------- invoice ---------- */
+  var invSelected = {}, invScopeVal = "all";
+
+  function payMonth(s){ if(s.date && /^\d{4}-\d{2}/.test(s.date)) return s.date.slice(0,7);
+    var t=s.createdAt?new Date(s.createdAt):new Date(); return t.toISOString().slice(0,7); }
+
+  function openInvoice(){
+    // period options
+    var sel=el("invScope"); sel.textContent="";
+    var ms={}; expenses.forEach(function(e){ ms[monthOf(e)]=true; });
+    var keys=Object.keys(ms).sort().reverse();
+    var oAll=document.createElement("option"); oAll.value="all"; oAll.textContent="All time"; sel.appendChild(oAll);
+    keys.forEach(function(k){ var o=document.createElement("option"); o.value=k; o.textContent=monthLabel(k); sel.appendChild(o); });
+    invScopeVal="all"; sel.value="all";
+    // people chips (default all included)
+    invSelected={}; people.forEach(function(p){ invSelected[p.id]=true; });
+    renderInvPeople();
+    el("invNote").value="";
+    el("invSetup").hidden=false; el("invResult").hidden=true;
+    el("invoiceOverlay").hidden=false; try{ document.body.style.overflow="hidden"; }catch(_){}
+    el("invClose").focus();
+  }
+  function closeInvoice(){ el("invoiceOverlay").hidden=true; try{ document.body.style.overflow=""; }catch(_){} }
+
+  function renderInvPeople(){ var box=el("invPeople"); box.textContent="";
+    people.forEach(function(p){ var chip=document.createElement("button"); chip.type="button"; chip.className="chip";
+      chip.setAttribute("aria-pressed",String(!!invSelected[p.id]));
+      var tick=document.createElement("span"); tick.className="tick";
+      var lab=document.createElement("span"); lab.textContent=p.name;
+      chip.appendChild(tick); chip.appendChild(lab);
+      chip.addEventListener("click", function(){ invSelected[p.id]=!invSelected[p.id]; chip.setAttribute("aria-pressed",String(invSelected[p.id]));
+        el("invAll").textContent = people.every(function(q){return invSelected[q.id];})?"Clear all":"Select all"; });
+      box.appendChild(chip); });
+    el("invAll").textContent = people.every(function(q){return invSelected[q.id];})?"Clear all":"Select all"; }
+
+  function invScopedLists(){
+    var ex = invScopeVal==="all" ? expenses : expenses.filter(function(e){ return monthOf(e)===invScopeVal; });
+    var pay = invScopeVal==="all" ? payments : payments.filter(function(s){ return payMonth(s)===invScopeVal; });
+    return {ex:ex, pay:pay};
+  }
+
+  function invData(){
+    var inc = people.filter(function(p){ return invSelected[p.id]; }).map(function(p){ return p.id; });
+    var sc = invScopedLists();
+    var rows = inc.map(function(id){
+      var pw = pairwise(id, sc.ex, sc.pay).filter(function(r){ return inc.indexOf(r.id)>=0; });
+      var net = pw.reduce(function(s,r){ return s+r.net; }, 0);
+      return { id:id, pw:pw, net:net };
+    });
+    // expenses that involve the included people, within scope, for the appendix
+    var exRows = sc.ex.filter(function(e){
+      return inc.indexOf(e.paidBy)>=0 || (e.splitAmong||[]).some(function(x){ return inc.indexOf(x)>=0; });
+    }).sort(function(a,b){ return (a.createdAt||0)-(b.createdAt||0); });
+    return { inc:inc, rows:rows, exRows:exRows };
+  }
+
+  function invNumber(){ var d=new Date();
+    return "INV-"+d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate())+"-"+pad2(d.getHours())+pad2(d.getMinutes()); }
+
+  function renderInvoice(){
+    var data=invData();
+    if(data.inc.length<1){ toast("Pick at least one person."); return false; }
+    var doc=el("invoiceDoc"); doc.textContent="";
+    var note=el("invNote").value.trim();
+    var periodTxt = invScopeVal==="all" ? "All time" : monthLabel(invScopeVal);
+
+    // header
+    var h=document.createElement("div"); h.className="inv-h";
+    var brand=document.createElement("div");
+    var b1=document.createElement("div"); b1.className="inv-brand"; b1.textContent="Split Four Ways";
+    var b2=document.createElement("div"); b2.style.fontSize=".8rem"; b2.style.color="#666"; b2.textContent="Expense statement";
+    brand.appendChild(b1); brand.appendChild(b2);
+    var meta=document.createElement("div"); meta.className="inv-meta";
+    meta.innerHTML = invNumber()+"<br>"+new Date().toLocaleDateString(undefined,{day:"numeric",month:"long",year:"numeric"})+"<br>Period: "+periodTxt;
+    h.appendChild(brand); h.appendChild(meta); doc.appendChild(h);
+    if(note){ var nd=document.createElement("div"); nd.className="inv-note"; nd.textContent=note; doc.appendChild(nd); }
+
+    // per-person statements
+    data.rows.forEach(function(r){
+      var card=document.createElement("div"); card.className="inv-person";
+      var top=document.createElement("div"); top.className="ip-top";
+      var nm=document.createElement("div"); nm.className="ip-name"; nm.textContent=nameOf(r.id);
+      var net=document.createElement("div"); net.className="ip-net "+(r.net>0?"get":r.net<0?"owe":"");
+      net.textContent = r.net>0?("Gets back "+fmt(r.net)) : r.net<0?("Owes "+fmt(-r.net)) : "Settled";
+      top.appendChild(nm); top.appendChild(net); card.appendChild(top);
+      var any=false;
+      r.pw.forEach(function(x){ if(x.net===0) return; any=true;
+        var line=document.createElement("div"); line.className="inv-line";
+        var l=document.createElement("span");
+        var val=document.createElement("span"); val.className="r "+(x.net>0?"get":"owe");
+        if(x.net>0){ l.textContent=nameOf(x.id)+" owes "+nameOf(r.id); val.textContent="+"+fmt(x.net); }
+        else { l.textContent=nameOf(r.id)+" owes "+nameOf(x.id); val.textContent="-"+fmt(-x.net); }
+        line.appendChild(l); line.appendChild(val); card.appendChild(line);
+      });
+      if(!any){ var e=document.createElement("div"); e.className="inv-line"; var l=document.createElement("span"); l.textContent="Nothing outstanding with the others"; l.style.color="#999"; e.appendChild(l); card.appendChild(e); }
+      doc.appendChild(card);
+    });
+
+    // appendix: expenses
+    if(data.exRows.length){
+      var sec=document.createElement("div"); sec.className="inv-sec"; sec.textContent="Expenses in this period"; doc.appendChild(sec);
+      var tbl=document.createElement("table");
+      var thead=document.createElement("tr");
+      ["Date","Expense","Paid by","Amount"].forEach(function(t,i){ var th=document.createElement("th"); if(i===3) th.className="r"; th.textContent=t; thead.appendChild(th); });
+      tbl.appendChild(thead);
+      var total=0;
+      data.exRows.forEach(function(e){ total+=e.amountMinor;
+        var tr=document.createElement("tr");
+        var td1=document.createElement("td"); td1.textContent=fmtDate(e)||"";
+        var td2=document.createElement("td"); td2.textContent=(e.desc||"Expense")+(e.category?" ("+e.category+")":"");
+        var td3=document.createElement("td"); td3.textContent=nameOf(e.paidBy);
+        var td4=document.createElement("td"); td4.className="r"; td4.textContent=fmt(e.amountMinor);
+        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tbl.appendChild(tr);
+      });
+      var trt=document.createElement("tr");
+      var tl=document.createElement("td"); tl.colSpan=3; tl.style.fontWeight="700"; tl.textContent="Total";
+      var tv=document.createElement("td"); tv.className="r"; tv.style.fontWeight="700"; tv.textContent=fmt(total);
+      trt.appendChild(tl); trt.appendChild(tv); tbl.appendChild(trt);
+      doc.appendChild(tbl);
+    }
+    var foot=document.createElement("div"); foot.className="inv-foot"; foot.textContent="Generated by Split Four Ways · amounts netted per pair";
+    doc.appendChild(foot);
+    return true;
+  }
+
+  function invoiceText(){
+    var data=invData();
+    var lines=["Split Four Ways — Expense statement",
+               invNumber()+"  ·  "+(invScopeVal==="all"?"All time":monthLabel(invScopeVal))];
+    var note=el("invNote").value.trim(); if(note) lines.push(note);
+    lines.push("");
+    data.rows.forEach(function(r){
+      lines.push(nameOf(r.id)+": "+(r.net>0?"gets back "+fmt(r.net):r.net<0?"owes "+fmt(-r.net):"settled"));
+      r.pw.forEach(function(x){ if(x.net>0) lines.push("   "+nameOf(x.id)+" owes "+nameOf(r.id)+": "+fmt(x.net));
+        else if(x.net<0) lines.push("   "+nameOf(r.id)+" owes "+nameOf(x.id)+": "+fmt(-x.net)); });
+    });
+    return lines.join("\n");
+  }
+
+  el("makeInvoice").addEventListener("click", openInvoice);
+  el("invClose").addEventListener("click", closeInvoice);
+  el("invoiceOverlay").addEventListener("click", function(ev){ if(ev.target===el("invoiceOverlay")) closeInvoice(); });
+  el("invScope").addEventListener("change", function(){ invScopeVal=el("invScope").value; });
+  el("invAll").addEventListener("click", function(){ var allOn=people.every(function(q){return invSelected[q.id];});
+    people.forEach(function(q){ invSelected[q.id]=!allOn; }); renderInvPeople(); });
+  el("invGenerate").addEventListener("click", function(){ if(renderInvoice()){ el("invSetup").hidden=true; el("invResult").hidden=false; } });
+  el("invBack").addEventListener("click", function(){ el("invResult").hidden=true; el("invSetup").hidden=false; });
+  el("invPrint").addEventListener("click", function(){ try{ window.print(); }catch(_){ toast("Printing not available here."); } });
+  el("invCopy").addEventListener("click", function(){ var text=invoiceText(), btn=el("invCopy");
+    function ok(){ btn.textContent="Copied!"; btn.classList.add("ok"); setTimeout(function(){ btn.textContent="Copy text"; btn.classList.remove("ok"); },1800); }
+    function fb(){ try{ var ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); ok(); }catch(_){ toast("Couldn't copy."); } }
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(ok).catch(fb); } else fb(); });
+  document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("invoiceOverlay").hidden) closeInvoice(); });
 
   /* ---------- boot ---------- */
   if(!CONFIGURED){
