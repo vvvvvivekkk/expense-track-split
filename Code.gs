@@ -1,38 +1,26 @@
 /**
  * Split Four Ways — Google Apps Script backend
  * -------------------------------------------------
- * This script turns your Google Sheet into a tiny API that your
- * static frontend (hosted on Vercel/Render) reads and writes.
+ * Turns your Google Sheet into a tiny API the static frontend reads/writes.
  *
- * SETUP (full steps are in README.md):
- *   1. Open your Sheet → Extensions → Apps Script.
- *   2. Delete any sample code, paste ALL of this file, Save.
- *   3. Deploy → New deployment → type "Web app".
- *        Execute as:  Me
- *        Who has access:  Anyone
- *      Copy the /exec URL it gives you and paste it into index.html.
+ * Tabs (People, Expenses, Settings, Settlements) and columns are created
+ * automatically. Adding this version over an older one is safe — any new
+ * columns are appended to existing tabs without disturbing old rows.
  *
- * The three tabs (People, Expenses, Settings) are created
- * automatically on first use, and People is seeded with the four names.
+ * Redeploy after editing: Deploy -> Manage deployments -> edit -> Deploy.
  */
 
-// --- Which Google Sheet this writes to -----------------------------------
-// Pre-filled with your sheet. If you paste this script INTO the sheet
-// (Extensions -> Apps Script), you can leave it as-is or set it to "" —
-// either way it targets this sheet.
 var SHEET_ID = "1C3GSm17VsmJVpU0X87fIGs8nyk2Veqy5yUaZiUVAlHs";
+var SHARED_TOKEN = ""; // leave "" for open access
 
-// --- Optional security ---------------------------------------------------
-// Leave "" to allow anyone with the URL (fine for a small group).
-// To harden: set the same non-empty string here AND in index.html (API_TOKEN).
-var SHARED_TOKEN = "";
-
-// --- Sheet/tab config ----------------------------------------------------
 var PEOPLE_TAB   = "People";
 var EXPENSE_TAB  = "Expenses";
 var SETTINGS_TAB = "Settings";
+var SETTLE_TAB   = "Settlements";
+
 var PEOPLE_HEADERS  = ["id", "name", "order"];
-var EXPENSE_HEADERS = ["id", "desc", "amount", "paidBy", "splitAmong", "createdAt"];
+var EXPENSE_HEADERS = ["id", "desc", "amount", "paidBy", "splitAmong", "category", "date", "items", "createdAt"];
+var SETTLE_HEADERS  = ["id", "from", "to", "amount", "date", "note", "createdAt"];
 
 // =========================================================================
 // HTTP entry points
@@ -49,26 +37,24 @@ function doGet(e) {
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000); // serialize writes so two people don't clash
-  } catch (_) {
-    return json_({ ok: false, error: "busy, try again" });
-  }
+  try { lock.waitLock(20000); }
+  catch (_) { return json_({ ok: false, error: "busy, try again" }); }
   try {
     var body = {};
     if (e && e.postData && e.postData.contents) body = JSON.parse(e.postData.contents);
     checkToken_(body);
 
     switch (body.action) {
-      case "addExpense":    addExpense_(body);          break;
-      case "deleteExpense": deleteRowById_(EXPENSE_TAB, body.id); break;
-      case "addPerson":     addPerson_(body.name);      break;
-      case "renamePerson":  renamePerson_(body.id, body.name); break;
-      case "removePerson":  deleteRowById_(PEOPLE_TAB, body.id);  break;
-      case "setCurrency":   setSetting_("currency", body.currency); break;
+      case "addExpense":      addExpense_(body); break;
+      case "deleteExpense":   deleteRowById_(EXPENSE_TAB, EXPENSE_HEADERS, body.id); break;
+      case "addPerson":       addPerson_(body.name); break;
+      case "renamePerson":    renamePerson_(body.id, body.name); break;
+      case "removePerson":    deleteRowById_(PEOPLE_TAB, PEOPLE_HEADERS, body.id); break;
+      case "setCurrency":     setSetting_("currency", body.currency); break;
+      case "addSettlement":   addSettlement_(body); break;
+      case "deleteSettlement":deleteRowById_(SETTLE_TAB, SETTLE_HEADERS, body.id); break;
       default: throw new Error("unknown action: " + body.action);
     }
-    // Always return the fresh full state so the client can resync in one call.
     return json_({ ok: true, data: loadAll_() });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
@@ -83,10 +69,7 @@ function doPost(e) {
 
 function loadAll_() {
   var people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS);
-  if (people.length === 0) {
-    seedPeople_();
-    people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS);
-  }
+  if (people.length === 0) { seedPeople_(); people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS); }
   people = people.map(function (p) {
     return { id: String(p.id), name: String(p.name), order: Number(p.order) || 0 };
   }).sort(function (a, b) { return a.order - b.order; });
@@ -95,18 +78,47 @@ function loadAll_() {
     return {
       id: String(r.id),
       desc: String(r.desc || ""),
-      amount: Number(r.amount) || 0,            // major units, e.g. 100.50
+      amount: Number(r.amount) || 0,
       paidBy: String(r.paidBy || ""),
       splitAmong: String(r.splitAmong || "").split(",").map(trim_).filter(Boolean),
+      category: String(r.category || ""),
+      date: String(r.date || ""),
+      items: parseItems_(r.items),
       createdAt: Number(r.createdAt) || 0
     };
   });
 
-  return { people: people, expenses: expenses, currency: getSetting_("currency", "₹") };
+  var settlements = readRows_(SETTLE_TAB, SETTLE_HEADERS).map(function (r) {
+    return {
+      id: String(r.id),
+      from: String(r.from || ""),
+      to: String(r.to || ""),
+      amount: Number(r.amount) || 0,
+      date: String(r.date || ""),
+      note: String(r.note || ""),
+      createdAt: Number(r.createdAt) || 0
+    };
+  });
+
+  return {
+    people: people,
+    expenses: expenses,
+    settlements: settlements,
+    currency: getSetting_("currency", "₹")
+  };
+}
+
+function parseItems_(raw) {
+  if (!raw) return [];
+  try {
+    var a = JSON.parse(raw);
+    if (!Array.isArray(a)) return [];
+    return a.map(function (it) { return { name: String(it.name || ""), amount: Number(it.amount) || 0 }; });
+  } catch (_) { return []; }
 }
 
 // =========================================================================
-// Write
+// Write — expenses
 // =========================================================================
 
 function addExpense_(b) {
@@ -114,23 +126,55 @@ function addExpense_(b) {
   if (!(amount > 0)) throw new Error("amount must be greater than zero");
   var among = (b.splitAmong || []).map(String).filter(Boolean);
   if (among.length === 0) throw new Error("splitAmong is empty");
-  var sh = getOrCreate_(EXPENSE_TAB, EXPENSE_HEADERS);
-  sh.appendRow([
-    newId_(),
-    String(b.desc || "").slice(0, 200),
-    amount,
-    String(b.paidBy || ""),
-    among.join(","),
-    Date.now()
-  ]);
+
+  var items = Array.isArray(b.items)
+    ? b.items.map(function (it) { return { name: String(it.name || "").slice(0, 100), amount: Number(it.amount) || 0 }; })
+             .filter(function (it) { return it.amount > 0 || it.name; })
+    : [];
+
+  appendObj_(EXPENSE_TAB, EXPENSE_HEADERS, {
+    id: newId_(),
+    desc: String(b.desc || "").slice(0, 200),
+    amount: amount,
+    paidBy: String(b.paidBy || ""),
+    splitAmong: among.join(","),
+    category: String(b.category || "").slice(0, 40),
+    date: String(b.date || "").slice(0, 10),
+    items: items.length ? JSON.stringify(items) : "",
+    createdAt: Date.now()
+  });
 }
+
+// =========================================================================
+// Write — settlements (someone paid someone back)
+// =========================================================================
+
+function addSettlement_(b) {
+  var amount = Number(b.amount);
+  if (!(amount > 0)) throw new Error("amount must be greater than zero");
+  if (!b.from || !b.to) throw new Error("from and to required");
+  if (String(b.from) === String(b.to)) throw new Error("from and to must differ");
+  appendObj_(SETTLE_TAB, SETTLE_HEADERS, {
+    id: newId_(),
+    from: String(b.from),
+    to: String(b.to),
+    amount: amount,
+    date: String(b.date || "").slice(0, 10),
+    note: String(b.note || "").slice(0, 120),
+    createdAt: Date.now()
+  });
+}
+
+// =========================================================================
+// Write — people
+// =========================================================================
 
 function addPerson_(name) {
   name = String(name || "").trim();
   if (!name) throw new Error("name required");
   var people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS);
   var maxOrder = people.reduce(function (m, p) { return Math.max(m, Number(p.order) || 0); }, 0);
-  getOrCreate_(PEOPLE_TAB, PEOPLE_HEADERS).appendRow([newId_(), name, maxOrder + 1]);
+  appendObj_(PEOPLE_TAB, PEOPLE_HEADERS, { id: newId_(), name: name, order: maxOrder + 1 });
 }
 
 function renamePerson_(id, name) {
@@ -138,23 +182,27 @@ function renamePerson_(id, name) {
   if (!name) throw new Error("name required");
   var sh = getOrCreate_(PEOPLE_TAB, PEOPLE_HEADERS);
   var r = findRow_(sh, id);
-  if (r > 0) sh.getRange(r, 2).setValue(name); // column 2 = name
+  if (r > 0) {
+    var col = headerIndex_(sh, "name"); // 1-based
+    if (col > 0) sh.getRange(r, col).setValue(name);
+  }
 }
 
-function deleteRowById_(tab, id) {
-  var sh = getOrCreate_(tab, tab === PEOPLE_TAB ? PEOPLE_HEADERS : EXPENSE_HEADERS);
+function deleteRowById_(tab, headers, id) {
+  var sh = getOrCreate_(tab, headers);
   var r = findRow_(sh, id);
   if (r > 0) sh.deleteRow(r);
 }
 
 function seedPeople_() {
-  var sh = getOrCreate_(PEOPLE_TAB, PEOPLE_HEADERS);
   [["p1", "Akshay", 1], ["p2", "Praney", 2], ["p3", "Vivek", 3], ["p4", "Logesh", 4]]
-    .forEach(function (row) { sh.appendRow(row); });
+    .forEach(function (row) {
+      appendObj_(PEOPLE_TAB, PEOPLE_HEADERS, { id: row[0], name: row[1], order: row[2] });
+    });
 }
 
 // =========================================================================
-// Settings (key/value in the Settings tab)
+// Settings (key/value)
 // =========================================================================
 
 function getSetting_(key, fallback) {
@@ -174,7 +222,7 @@ function setSetting_(key, value) {
 }
 
 // =========================================================================
-// Sheet helpers
+// Sheet helpers (header-aware, backward compatible)
 // =========================================================================
 
 function ss_() {
@@ -191,11 +239,38 @@ function getOrCreate_(tabName, headers) {
   } else if (sh.getLastRow() === 0) {
     sh.appendRow(headers);
     sh.setFrozenRows(1);
+  } else {
+    ensureHeaders_(sh, headers); // add any new columns to an existing tab
   }
   return sh;
 }
 
-// Read all data rows of a tab into [{header: value}, ...]
+// Ensure every header in `needed` exists in row 1; append missing ones at the end.
+function ensureHeaders_(sh, needed) {
+  var lastCol = Math.max(sh.getLastColumn(), 1);
+  var head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var missing = needed.filter(function (h) { return head.indexOf(h) < 0; });
+  if (missing.length) {
+    sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+    sh.setFrozenRows(1);
+  }
+}
+
+// 1-based column index of a header, or -1.
+function headerIndex_(sh, name) {
+  var head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0];
+  for (var i = 0; i < head.length; i++) if (String(head[i]).trim() === name) return i + 1;
+  return -1;
+}
+
+// Append a row matching the sheet's CURRENT header order (not a fixed order).
+function appendObj_(tabName, headers, obj) {
+  var sh = getOrCreate_(tabName, headers);
+  var head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(function (h) { return String(h).trim(); });
+  var row = head.map(function (h) { return obj[h] !== undefined ? obj[h] : ""; });
+  sh.appendRow(row);
+}
+
 function readRows_(tabName, headers) {
   var sh = getOrCreate_(tabName, headers);
   var values = sh.getDataRange().getValues();
@@ -204,7 +279,7 @@ function readRows_(tabName, headers) {
   var out = [];
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (row.join("") === "") continue; // skip blank rows
+    if (row.join("") === "") continue;
     var obj = {};
     for (var c = 0; c < head.length; c++) obj[head[c]] = row[c];
     out.push(obj);
@@ -212,7 +287,6 @@ function readRows_(tabName, headers) {
   return out;
 }
 
-// Row number (1-based) of the row whose first column equals id, else -1.
 function findRow_(sh, id) {
   id = String(id);
   var ids = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 1).getValues();
@@ -237,7 +311,5 @@ function newId_() {
 function trim_(s) { return String(s).trim(); }
 
 function json_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }

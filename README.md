@@ -81,10 +81,29 @@ folder, follow the prompts.
 - Everyone opens the same deployed URL. Each expense they add writes a row to the
   **Expenses** tab; the page re-reads the Sheet every ~10 seconds so all four see
   updates within a few seconds.
+- Each expense can have a **category**, a **date**, and **multiple items**
+  (the total is the sum of the items). Use the **month filter** at the top of
+  the Expenses list to see a month's spending and the **by-category** breakdown
+  ("we spent ₹8k on food this month").
 - Rename people, add a person, or change currency under **People & currency** —
   it all saves to the Sheet.
 - **Tap any person's balance tile** to open their profile: how much they paid
-  out, their share of the bills, their net, and the list of expenses they're in.
+  out, their share, their overall net, and a **person-by-person** breakdown —
+  for each other person, who owes whom (mutual debts are netted / subtracted).
+- **Settle up:** when someone pays a debt back, tap **Mark paid** on the
+  settle-up row (or record it manually under **Payments & settle-ups**). The
+  payment clears that much of the balance so old debts don't linger. Every
+  payment is logged in the Settlements tab and can be deleted.
+
+### Tabs the sheet keeps
+`People`, `Expenses`, `Settings`, and `Settlements`. New columns
+(category, date, items on Expenses) are added automatically — an older sheet
+keeps working and just gains the new columns.
+
+### Updating the backend
+After pasting a new `Code.gs`, you must **Deploy → Manage deployments →
+(edit the pencil) → Deploy** to publish it to the same `/exec` URL. Just
+saving in the editor is not enough.
 - You can open the Google Sheet directly any time to see or fix the raw data.
   Columns: `Expenses` = id, desc, amount, paidBy, splitAmong, createdAt;
   `People` = id, name, order.
