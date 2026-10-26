@@ -241,8 +241,9 @@
   .pf-bar .track{height:9px;border-radius:999px;background:var(--surface-2);overflow:hidden;}
   .pf-bar .fill{height:100%;border-radius:999px;background:var(--accent);}
   .pf-bar .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.8rem;font-weight:600;}
-  .pf-spark{display:flex;align-items:flex-end;gap:5px;height:72px;padding-top:6px;}
+  .pf-spark{display:flex;align-items:flex-end;gap:5px;height:104px;padding-top:6px;}
   .pf-spark .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;justify-content:flex-end;height:100%;}
+  .pf-spark .val{font-size:.62rem;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--fg);font-weight:600;white-space:nowrap;}
   .pf-spark .bar{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;}
   .pf-spark .lab{font-size:.6rem;color:var(--muted);white-space:nowrap;}
 
@@ -629,6 +630,12 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function el(id){ return document.getElementById(id); }
   function fmt(minor){ var n=minor<0; minor=Math.abs(minor);
     return (n?"-":"")+currency+(minor/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  // compact (no decimals) — for tight spots like month-bar labels
+  function fmtShort(minor){ var n=minor<0; minor=Math.abs(minor);
+    return (n?"-":"")+currency+Math.round(minor/100).toLocaleString(); }
+  // sort key: the expense's chosen DATE (falls back to when it was added)
+  function expTime(e){ if(e.date && /^\d{4}-\d{2}-\d{2}/.test(e.date)){ var t=Date.parse(e.date+"T00:00:00"); if(!isNaN(t)) return t; } return e.createdAt||0; }
+  function byDateDesc(a,b){ var d=expTime(b)-expTime(a); return d!==0 ? d : (b.createdAt||0)-(a.createdAt||0); }
   function parseAmount(s){ if(!s) return NaN; s=String(s).replace(/,/g,"").trim(); var v=parseFloat(s);
     return isFinite(v)?Math.round(v*100):NaN; }
   function byOrder(a,b){ return (orderIdx[a]||0)-(orderIdx[b]||0); }
@@ -866,7 +873,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
     var list=el("pfList"); list.textContent="";
     if(!rows.length){ list.innerHTML='<p class="empty">No expenses yet.</p>'; }
-    rows.sort(function(a,b){ return (b.e.createdAt||0)-(a.e.createdAt||0); }).forEach(function(r){
+    rows.sort(function(a,b){ return byDateDesc(a.e, b.e); }).forEach(function(r){
       var row=document.createElement("div"); row.className="pf-exp";
       var body=document.createElement("div"); body.className="body";
       var desc=document.createElement("div"); desc.className="desc"; desc.textContent=r.e.desc||"Expense";
@@ -919,9 +926,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var e2=document.createElement("p"); e2.className="eyebrow"; e2.textContent="Their spending by month"; sec2.appendChild(e2);
       var sp=document.createElement("div"); sp.className="pf-spark";
       months.forEach(function(k){ var col=document.createElement("div"); col.className="col";
-        var bar=document.createElement("div"); bar.className="bar"; bar.style.height=Math.max(2,Math.round(byMonth[k]/mmax*56))+"px"; bar.title=fmt(byMonth[k]);
+        var val=document.createElement("div"); val.className="val"; val.textContent=fmtShort(byMonth[k]);
+        var bar=document.createElement("div"); bar.className="bar"; bar.style.height=Math.max(2,Math.round(byMonth[k]/mmax*54))+"px"; bar.title=fmt(byMonth[k]);
         var lab=document.createElement("div"); lab.className="lab"; lab.textContent=new Date(k+"-01T00:00:00").toLocaleDateString(undefined,{month:"short"});
-        col.appendChild(bar); col.appendChild(lab); sp.appendChild(col); });
+        col.appendChild(val); col.appendChild(bar); col.appendChild(lab); sp.appendChild(col); });
       sec2.appendChild(sp); box.appendChild(sec2);
     }
   }
@@ -938,7 +946,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     if(!ready){ list.innerHTML='<p class="empty">Loading…</p>'; return; }
     var all=applyFilters(monthExpenses());
     if(!all.length){ list.innerHTML='<p class="empty">'+(expenses.length?(filtersActive()?"No expenses match the filters.":"Nothing in "+monthLabel(monthFilter)+"."):"No expenses yet. Add the first one above.")+'</p>'; return; }
-    var sorted=all.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);});
+    var sorted=all.slice().sort(byDateDesc);
     var shown = (ledgerExpanded || sorted.length<=LEDGER_PREVIEW) ? sorted : sorted.slice(0,LEDGER_PREVIEW);
     shown.forEach(function(e){
       var members=(e.splitAmong||[]).filter(function(id){ return people.some(function(p){return p.id===id;}); });
