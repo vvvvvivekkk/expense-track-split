@@ -208,6 +208,9 @@
   .pay-row .pmain{font-weight:600;font-size:.92rem;}
   .pay-row .psub{font-size:.76rem;color:var(--muted);margin-top:1px;}
   .pay-row .pamt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;color:var(--pos);}
+  .pay-row.tap{cursor:pointer;margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:8px;}
+  .pay-row.tap:hover{background:rgba(255,255,255,.04);}
+  .pay-row.tap:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
   .manual{display:grid;gap:8px;margin-top:4px;}
   .manual .mrow{display:flex;gap:8px;} .manual .mrow>*{flex:1;min-width:0;}
 
@@ -592,6 +595,30 @@
       <div class="inv-actions">
         <button type="button" class="ghostbtn" id="editDelete" style="color:var(--neg);border-color:var(--neg)">Delete</button>
         <button type="submit" class="primary inv-pdf" id="editSave">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="payEditOverlay" class="overlay" hidden>
+  <div class="sheet card" role="dialog" aria-modal="true" aria-labelledby="payEditTitle">
+    <div class="sheet-head">
+      <h2 class="pf-name" id="payEditTitle">Edit payment</h2>
+      <button class="pf-close" id="payEditClose" aria-label="Close">&times;</button>
+    </div>
+    <form id="payEditForm" autocomplete="off">
+      <div class="two">
+        <label class="fld" for="peFrom"><span class="lab">Who paid</span><select id="peFrom"></select></label>
+        <label class="fld" for="peTo"><span class="lab">Paid to</span><select id="peTo"></select></label>
+      </div>
+      <label class="fld" for="peAmt"><span class="lab">Amount</span>
+        <span class="amount-field"><span class="cur">NT$</span>
+          <input id="peAmt" type="text" inputmode="decimal" placeholder="0.00"></span></label>
+      <label class="fld" for="peDate"><span class="lab">Date</span><input id="peDate" type="date"></label>
+      <label class="fld" for="peNote"><span class="lab">Note (optional)</span><input id="peNote" type="text" placeholder="e.g. UPI, cash…"></label>
+      <div class="inv-actions">
+        <button type="button" class="ghostbtn" id="peDelete" style="color:var(--neg);border-color:var(--neg)">Delete</button>
+        <button type="submit" class="primary inv-pdf" id="peSave">Save changes</button>
       </div>
     </form>
   </div>
@@ -1088,8 +1115,13 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       b.appendChild(main); b.appendChild(sub);
       var amt=document.createElement("div"); amt.className="pamt"; amt.textContent=fmt(s.amountMinor);
       row.appendChild(b); row.appendChild(amt);
-      if(canEdit()){ var del=document.createElement("button"); del.className="del"; del.type="button"; del.title="Delete"; del.setAttribute("aria-label","Delete payment"); del.textContent="×";
-        del.addEventListener("click", function(){ deletePayment(s.id); }); row.appendChild(del); }
+      if(canEdit()){
+        row.classList.add("tap"); row.setAttribute("role","button"); row.setAttribute("tabindex","0"); row.title="Edit payment";
+        row.addEventListener("click", function(){ openPayEdit(s); });
+        row.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openPayEdit(s); } });
+        var del=document.createElement("button"); del.className="del"; del.type="button"; del.title="Delete"; del.setAttribute("aria-label","Delete payment"); del.textContent="×";
+        del.addEventListener("click", function(ev){ ev.stopPropagation(); deletePayment(s.id); }); row.appendChild(del);
+      }
       box.appendChild(row); }); }
 
   function renderPeopleControls(){
@@ -1517,6 +1549,44 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     closeEdit();
   });
   document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("editOverlay").hidden) closeEdit(); });
+
+  /* ---------- edit an existing payment / settle-up ---------- */
+  var payEditId=null;
+  function fillPeopleSelect(sel, chosen){ sel.textContent="";
+    people.forEach(function(p){ var o=document.createElement("option"); o.value=p.id; o.textContent=p.name; sel.appendChild(o); });
+    if(people.some(function(p){return p.id===chosen;})) sel.value=chosen; }
+  function openPayEdit(s){
+    if(!canEdit()){ toast("View-only — you can't edit payments."); return; }
+    if(!s) return; payEditId=s.id;
+    fillPeopleSelect(el("peFrom"), s.from);
+    fillPeopleSelect(el("peTo"), s.to);
+    el("peAmt").value = (s.amountMinor/100).toFixed(2);
+    el("peDate").value = (s.date && /^\d{4}-\d{2}-\d{2}/.test(s.date)) ? s.date.slice(0,10) : todayStr();
+    el("peNote").value = s.note || "";
+    el("payEditForm").querySelector(".cur").textContent = currency;
+    el("payEditOverlay").hidden=false; try{ document.body.style.overflow="hidden"; }catch(_){}
+    el("payEditClose").focus();
+  }
+  function closePayEdit(){ el("payEditOverlay").hidden=true; payEditId=null; try{ document.body.style.overflow=""; }catch(_){} }
+  el("payEditClose").addEventListener("click", closePayEdit);
+  el("payEditOverlay").addEventListener("click", function(ev){ if(ev.target===el("payEditOverlay")) closePayEdit(); });
+  el("peDelete").addEventListener("click", function(){ var id=payEditId; if(!id) return; closePayEdit(); deletePayment(id); });
+  el("payEditForm").addEventListener("submit", function(ev){ ev.preventDefault();
+    if(!payEditId) return;
+    var from=el("peFrom").value, to=el("peTo").value;
+    var minor=parseAmount(el("peAmt").value);
+    var date=el("peDate").value || todayStr();
+    var note=el("peNote").value.trim();
+    if(!from||!to){ toast("Choose both people."); return; }
+    if(from===to){ toast("A payment needs two different people."); return; }
+    if(!(minor>0)){ toast("Enter an amount."); return; }
+    var oldId=payEditId; closePayEdit();
+    // Backend has no updateSettlement — apply the edit as remove-old + add-corrected.
+    withServer({action:"deleteSettlement",id:oldId}).then(function(){
+      return withServer({action:"addSettlement",from:from,to:to,amount:minor/100,date:date,note:note}, "Payment updated");
+    });
+  });
+  document.addEventListener("keydown", function(ev){ if(ev.key==="Escape" && !el("payEditOverlay").hidden) closePayEdit(); });
 
   /* ---------- Netflix profile gate + PIN ---------- */
   var me = null, gateInited = false;
