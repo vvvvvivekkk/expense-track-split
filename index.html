@@ -241,10 +241,16 @@
   .pf-bar .track{height:9px;border-radius:999px;background:var(--surface-2);overflow:hidden;}
   .pf-bar .fill{height:100%;border-radius:999px;background:var(--accent);}
   .pf-bar .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:.8rem;font-weight:600;}
+  .pf-chart-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .pf-chart-head .eyebrow{margin-bottom:8px;}
   .pf-spark{display:flex;align-items:flex-end;gap:5px;height:104px;padding-top:6px;}
-  .pf-spark .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;justify-content:flex-end;height:100%;}
+  .pf-spark .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;justify-content:flex-end;height:100%;background:none;border:0;cursor:pointer;padding:2px 0;border-radius:6px;transition:background .15s;}
+  .pf-spark .col:hover{background:rgba(255,255,255,.05);}
+  .pf-spark .col.active{background:rgba(229,9,20,.12);}
   .pf-spark .val{font-size:.62rem;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--fg);font-weight:600;white-space:nowrap;}
-  .pf-spark .bar{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;}
+  .pf-spark .bar{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;opacity:.78;transition:opacity .15s;}
+  .pf-spark .col:hover .bar,.pf-spark .col.active .bar{opacity:1;}
+  .pf-spark .col.active .lab{color:var(--accent);font-weight:700;}
   .pf-spark .lab{font-size:.6rem;color:var(--muted);white-space:nowrap;}
 
   .inv-actions{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
@@ -514,7 +520,7 @@
       <p class="eyebrow" id="pfSettleHead">Settle up</p>
       <div id="pfSettle"></div>
     </div>
-    <p class="eyebrow">Expenses they're in</p>
+    <p class="eyebrow" id="pfListHead">Expenses they're in</p>
     <div id="pfList"></div>
   </div>
 </div>
@@ -822,36 +828,18 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       g.appendChild(c); }); }
 
   /* ---------- profile ---------- */
+  var pfId=null, pfMonth=null;   // open profile + its selected month filter (null = all time)
   function openProfile(id){
     if(!canOpen(id)){ toast("Only Vivek can open other profiles."); return; }
     var p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i];
     if(!p) return;
-    var paid=0, share=0, rows=[];
-    expenses.forEach(function(e){
-      var members=(e.splitAmong||[]).filter(function(x){ return people.some(function(q){return q.id===x;}); });
-      var mine = members.indexOf(id)>=0 ? shares(e.amountMinor,members)[id] : 0;
-      var isPayer = e.paidBy===id;
-      if(isPayer) paid+=e.amountMinor;
-      if(mine) share+=mine;
-      if(isPayer || mine) rows.push({e:e, mine:mine, isPayer:isPayer});
-    });
-    // overall net includes recorded payments (settle-ups), so it matches the per-person rows
+    pfId=id; pfMonth=null;                 // reset month filter each open
+    el("pfName").textContent=p.name;
     var net=balances()[id]||0;
 
-    el("pfName").textContent=p.name;
+    renderProfileScoped();                 // stats + category chart + month chart + list (respects pfMonth)
 
-    var stats=el("pfStats"); stats.textContent="";
-    [["Paid out", fmt(paid), ""],
-     ["Their share", fmt(share), ""],
-     [net>=0?"Gets back":"Owes", fmt(Math.abs(net)), net>0?"pos":net<0?"neg":""]
-    ].forEach(function(s){ var d=document.createElement("div"); d.className="pf-stat"+(s[2]?" "+s[2]:"");
-      var k=document.createElement("div"); k.className="k"; k.textContent=s[0];
-      var vv=document.createElement("div"); vv.className="vv num"; vv.textContent=s[1];
-      d.appendChild(k); d.appendChild(vv); stats.appendChild(d); });
-
-    renderProfileCharts(id);
-
-    // Person-to-person settle-up: who should pay whom, netted
+    // Person-to-person settle-up: who should pay whom, netted (always all-time)
     var pw=pairwise(id);
     var wrap=el("pfSettle"); wrap.textContent="";
     var head=el("pfSettleHead");
@@ -887,9 +875,95 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       el("pfSettleWrap").hidden=true;
     }
 
+    var ov=el("profileOverlay"); ov.hidden=false;
+    try{ document.body.style.overflow="hidden"; }catch(_){}
+    el("pfClose").focus();
+  }
+
+  // Compute a person's figures over all expenses, optionally limited to one month ("YYYY-MM")
+  function scopedData(id, month){
+    var paid=0, share=0, total=0, rows=[], byCat={};
+    expenses.forEach(function(e){
+      if(month && monthOf(e)!==month) return;
+      var members=(e.splitAmong||[]).filter(function(x){ return people.some(function(q){return q.id===x;}); });
+      var mine = members.indexOf(id)>=0 ? shares(e.amountMinor,members)[id] : 0;
+      var isPayer = e.paidBy===id;
+      if(!(isPayer || mine)) return;
+      if(isPayer) paid+=e.amountMinor;
+      if(mine){ share+=mine; var c=e.category||"Other"; byCat[c]=(byCat[c]||0)+mine; }
+      total+=e.amountMinor;
+      rows.push({e:e, mine:mine, isPayer:isPayer});
+    });
+    return { paid:paid, share:share, total:total, others:total-share, rows:rows, byCat:byCat };
+  }
+
+  // Render the month-dependent parts of the profile (stats + category chart + month chart + list)
+  function renderProfileScoped(){
+    var id=pfId, p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i]; if(!p) return;
+    var all=scopedData(id, null);
+    var sc = pfMonth ? scopedData(id, pfMonth) : all;
+    var net = balances()[id]||0;
+    var mLabel = pfMonth ? monthLabel(pfMonth) : "";
+
+    // ---- stat tiles ----
+    var stats=el("pfStats"); stats.textContent="";
+    var tiles = pfMonth
+      ? [["Total spent "+mLabel, fmt(sc.total), ""], ["Their share", fmt(sc.share), ""], ["Others' share", fmt(sc.others), ""]]
+      : [["Paid out", fmt(all.paid), ""], ["Their share", fmt(all.share), ""],
+         [net>=0?"Gets back":"Owes", fmt(Math.abs(net)), net>0?"pos":net<0?"neg":""]];
+    tiles.forEach(function(s){ var d=document.createElement("div"); d.className="pf-stat"+(s[2]?" "+s[2]:"");
+      var k=document.createElement("div"); k.className="k"; k.textContent=s[0];
+      var vv=document.createElement("div"); vv.className="vv num"; vv.textContent=s[1];
+      d.appendChild(k); d.appendChild(vv); stats.appendChild(d); });
+
+    // ---- charts: category (scoped) + month (interactive) ----
+    var box=el("pfCharts"); box.textContent="";
+
+    // category
+    var cats=Object.keys(sc.byCat).map(function(c){return {k:c,v:sc.byCat[c]};}).sort(function(a,b){return b.v-a.v;});
+    var sec1=document.createElement("div"); sec1.className="pf-chart";
+    var e1=document.createElement("p"); e1.className="eyebrow"; e1.textContent="Their spending by category"+(mLabel?" — "+mLabel:""); sec1.appendChild(e1);
+    if(!cats.length){ var em=document.createElement("p"); em.className="empty"; em.textContent="Nothing in "+(mLabel||"this period")+"."; sec1.appendChild(em); }
+    else {
+      var cmax=cats.reduce(function(m,r){return Math.max(m,r.v);},1);
+      var bars=document.createElement("div"); bars.className="pf-bars";
+      cats.forEach(function(r){ var row=document.createElement("div"); row.className="pf-bar";
+        var k=document.createElement("div"); k.className="k"; k.textContent=r.k;
+        var track=document.createElement("div"); track.className="track"; var fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.max(4,Math.round(r.v/cmax*100))+"%"; track.appendChild(fill);
+        var v=document.createElement("div"); v.className="v"; v.textContent=fmt(r.v);
+        row.appendChild(k); row.appendChild(track); row.appendChild(v); bars.appendChild(row); });
+      sec1.appendChild(bars);
+    }
+    box.appendChild(sec1);
+
+    // month chart (all-time data, clickable to filter)
+    var byMonth={}; all.rows.forEach(function(r){ if(r.mine){ var m=monthOf(r.e); byMonth[m]=(byMonth[m]||0)+r.mine; } });
+    var months=Object.keys(byMonth).sort(); if(months.length>6) months=months.slice(months.length-6);
+    if(months.length>=2){
+      var mmax=months.reduce(function(m,k){return Math.max(m,byMonth[k]);},1);
+      var sec2=document.createElement("div"); sec2.className="pf-chart";
+      var head=document.createElement("div"); head.className="pf-chart-head";
+      var e2=document.createElement("p"); e2.className="eyebrow"; e2.textContent="Their spending by month"; head.appendChild(e2);
+      if(pfMonth){ var clr=document.createElement("button"); clr.type="button"; clr.className="linkbtn"; clr.textContent="Show all months";
+        clr.addEventListener("click", function(){ pfMonth=null; renderProfileScoped(); }); head.appendChild(clr); }
+      sec2.appendChild(head);
+      var sp=document.createElement("div"); sp.className="pf-spark";
+      months.forEach(function(k){ var col=document.createElement("button"); col.type="button"; col.className="col"+(k===pfMonth?" active":"");
+        col.setAttribute("aria-label", monthLabel(k)+" "+fmt(byMonth[k]));
+        var val=document.createElement("div"); val.className="val"; val.textContent=fmtShort(byMonth[k]);
+        var bar=document.createElement("div"); bar.className="bar"; bar.style.height=Math.max(2,Math.round(byMonth[k]/mmax*54))+"px"; bar.title=fmt(byMonth[k]);
+        var lab=document.createElement("div"); lab.className="lab"; lab.textContent=new Date(k+"-01T00:00:00").toLocaleDateString(undefined,{month:"short"});
+        col.appendChild(val); col.appendChild(bar); col.appendChild(lab);
+        col.addEventListener("click", function(){ pfMonth = (pfMonth===k) ? null : k; renderProfileScoped(); });
+        sp.appendChild(col); });
+      sec2.appendChild(sp); box.appendChild(sec2);
+    }
+
+    // ---- expense list (scoped) ----
     var list=el("pfList"); list.textContent="";
-    if(!rows.length){ list.innerHTML='<p class="empty">No expenses yet.</p>'; }
-    rows.sort(function(a,b){ return byDateDesc(a.e, b.e); }).forEach(function(r){
+    var lh=el("pfListHead"); if(lh) lh.textContent = "Expenses they're in"+(mLabel?" — "+mLabel:"");
+    if(!sc.rows.length){ list.innerHTML='<p class="empty">No expenses'+(mLabel?" in "+mLabel:"")+'.</p>'; return; }
+    sc.rows.slice().sort(function(a,b){ return byDateDesc(a.e, b.e); }).forEach(function(r){
       var row=document.createElement("div"); row.className="pf-exp";
       var body=document.createElement("div"); body.className="body";
       var desc=document.createElement("div"); desc.className="desc"; desc.textContent=r.e.desc||"Expense";
@@ -904,51 +978,6 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       sh.appendChild(document.createTextNode(fmt(r.mine))); sh.appendChild(k);
       row.appendChild(body); row.appendChild(sh); list.appendChild(row);
     });
-
-    var ov=el("profileOverlay"); ov.hidden=false;
-    try{ document.body.style.overflow="hidden"; }catch(_){}
-    el("pfClose").focus();
-  }
-  // Per-person charts: their SHARE by category + by month
-  function renderProfileCharts(id){
-    var box=el("pfCharts"); box.textContent="";
-    var byCat={}, byMonth={}, any=false;
-    expenses.forEach(function(e){
-      var members=(e.splitAmong||[]).filter(function(x){ return people.some(function(q){return q.id===x;}); });
-      if(members.indexOf(id)<0) return;
-      var mine=shares(e.amountMinor,members)[id]||0; if(!mine) return; any=true;
-      var c=e.category||"Other"; byCat[c]=(byCat[c]||0)+mine;
-      var m=monthOf(e); byMonth[m]=(byMonth[m]||0)+mine;
-    });
-    if(!any) return;
-
-    // by category (bars)
-    var cats=Object.keys(byCat).map(function(c){return {k:c,v:byCat[c]};}).sort(function(a,b){return b.v-a.v;});
-    var cmax=cats.reduce(function(m,r){return Math.max(m,r.v);},1);
-    var sec1=document.createElement("div"); sec1.className="pf-chart";
-    var e1=document.createElement("p"); e1.className="eyebrow"; e1.textContent="Their spending by category"; sec1.appendChild(e1);
-    var bars=document.createElement("div"); bars.className="pf-bars";
-    cats.forEach(function(r){ var row=document.createElement("div"); row.className="pf-bar";
-      var k=document.createElement("div"); k.className="k"; k.textContent=r.k;
-      var track=document.createElement("div"); track.className="track"; var fill=document.createElement("div"); fill.className="fill"; fill.style.width=Math.max(4,Math.round(r.v/cmax*100))+"%"; track.appendChild(fill);
-      var v=document.createElement("div"); v.className="v"; v.textContent=fmt(r.v);
-      row.appendChild(k); row.appendChild(track); row.appendChild(v); bars.appendChild(row); });
-    sec1.appendChild(bars); box.appendChild(sec1);
-
-    // by month (spark columns) — last 6 months present
-    var months=Object.keys(byMonth).sort(); if(months.length>6) months=months.slice(months.length-6);
-    if(months.length>=2){
-      var mmax=months.reduce(function(m,k){return Math.max(m,byMonth[k]);},1);
-      var sec2=document.createElement("div"); sec2.className="pf-chart";
-      var e2=document.createElement("p"); e2.className="eyebrow"; e2.textContent="Their spending by month"; sec2.appendChild(e2);
-      var sp=document.createElement("div"); sp.className="pf-spark";
-      months.forEach(function(k){ var col=document.createElement("div"); col.className="col";
-        var val=document.createElement("div"); val.className="val"; val.textContent=fmtShort(byMonth[k]);
-        var bar=document.createElement("div"); bar.className="bar"; bar.style.height=Math.max(2,Math.round(byMonth[k]/mmax*54))+"px"; bar.title=fmt(byMonth[k]);
-        var lab=document.createElement("div"); lab.className="lab"; lab.textContent=new Date(k+"-01T00:00:00").toLocaleDateString(undefined,{month:"short"});
-        col.appendChild(val); col.appendChild(bar); col.appendChild(lab); sp.appendChild(col); });
-      sec2.appendChild(sp); box.appendChild(sec2);
-    }
   }
 
   function closeProfile(){ el("profileOverlay").hidden=true; try{ document.body.style.overflow=""; }catch(_){} }
