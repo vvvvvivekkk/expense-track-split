@@ -1054,7 +1054,12 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function toggleLabel(){ var allOn=people.length>0&&people.every(function(p){return selected[p.id];});
     el("toggleAll").textContent=allOn?"Clear all":"Select all"; }
 
-  function afterData(){ people.sort(function(a,b){return (a.order||0)-(b.order||0);});
+  // Preferred display order by name (Akshay, Vivek, Praney, Logesh); others keep sheet order after these.
+  var PREFERRED_ORDER = {akshay:1, vivek:2, praney:3, logesh:4};
+  function applyPreferredOrder(){ people.forEach(function(p){ var k=(p.name||"").trim().toLowerCase();
+    p.order = PREFERRED_ORDER[k] != null ? PREFERRED_ORDER[k] : (100 + (p.order||0)); }); }
+
+  function afterData(){ applyPreferredOrder(); people.sort(function(a,b){return (a.order||0)-(b.order||0);});
     orderIdx={}; people.forEach(function(p){ orderIdx[p.id]=p.order||0; });
     var sig=JSON.stringify(people);
     if(sig!==peopleSig && !focusWithin("peopleSettings") && !focusWithin("addForm")){ peopleSig=sig; renderPeopleControls(); applyMeDefaults(); }
