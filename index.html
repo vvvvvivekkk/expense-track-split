@@ -894,6 +894,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var body=document.createElement("div"); body.className="body";
       var desc=document.createElement("div"); desc.className="desc"; desc.textContent=r.e.desc||"Expense";
       var meta=document.createElement("div"); meta.className="meta";
+      var dt=fmtDate(r.e); if(dt){ meta.appendChild(document.createTextNode(dt+"  ·  ")); }
       meta.appendChild(document.createTextNode("Total "+fmt(r.e.amountMinor)+"  ·  "));
       if(r.isPayer){ var tag=document.createElement("span"); tag.className="tag"; tag.textContent=p.name+" paid"; meta.appendChild(tag); }
       else { meta.appendChild(document.createTextNode("paid by "+nameOf(r.e.paidBy))); }
@@ -1011,7 +1012,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     el("payCount").textContent = payments.length ? "("+payments.length+")" : "";
     var box=el("payList"); box.textContent="";
     if(!payments.length){ box.innerHTML='<p class="empty">No payments logged yet.</p>'; return; }
-    payments.slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); }).forEach(function(s){
+    payments.slice().sort(byDateDesc).forEach(function(s){
       var row=document.createElement("div"); row.className="pay-row";
       var b=document.createElement("div"); b.className="pbody";
       var main=document.createElement("div"); main.className="pmain"; main.textContent=nameOf(s.from)+" → "+nameOf(s.to);
