@@ -370,6 +370,7 @@
   </header>
 
   <div class="banner" id="banner"></div>
+  <div class="banner info" id="voNote" hidden style="display:block">👀 View-only access — you can browse everything but can't make changes.</div>
 
   <section id="settleSection">
     <div class="card card-pad" id="settleCard">
@@ -387,7 +388,7 @@
     <button type="button" class="invoice-open" id="makeInvoice">🧾 Make an invoice</button>
   </section>
 
-  <section>
+  <section id="addSection">
     <div class="card card-pad">
       <p class="eyebrow">Add an expense</p>
       <form id="addForm" autocomplete="off">
@@ -463,24 +464,26 @@
     <details class="settings" id="paymentsDetails">
       <summary><span class="chev">›</span> Payments &amp; settle-ups <span id="payCount"></span></summary>
       <div class="card card-pad" style="margin-top:10px">
-        <p class="eyebrow">Record a payment</p>
-        <div class="manual">
-          <div class="mrow">
-            <select id="payFrom" aria-label="Who paid"></select>
-            <select id="payTo" aria-label="Paid to"></select>
+        <div id="recordPaymentWrap">
+          <p class="eyebrow">Record a payment</p>
+          <div class="manual">
+            <div class="mrow">
+              <select id="payFrom" aria-label="Who paid"></select>
+              <select id="payTo" aria-label="Paid to"></select>
+            </div>
+            <div class="mrow">
+              <span class="amount-field" style="flex:1"><span class="cur">₹</span>
+                <input id="payAmt" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount"></span>
+            </div>
+            <button type="button" class="primary" id="payBtn" style="margin-top:2px">Record payment</button>
           </div>
-          <div class="mrow">
-            <span class="amount-field" style="flex:1"><span class="cur">₹</span>
-              <input id="payAmt" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount"></span>
-          </div>
-          <button type="button" class="primary" id="payBtn" style="margin-top:2px">Record payment</button>
         </div>
         <p class="eyebrow" style="margin-top:18px">History</p>
         <div id="payList"><p class="empty">No payments logged yet.</p></div>
       </div>
     </details>
 
-    <details class="settings">
+    <details class="settings" id="peopleCurrencyDetails">
       <summary><span class="chev">›</span> People &amp; currency</summary>
       <div class="card card-pad" style="margin-top:10px">
         <p class="eyebrow">Rename people</p>
@@ -697,7 +700,17 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.remove("show"); },2600); }
 
   /* ---------- render ---------- */
-  function render(){ ensureMonths(); renderFilters(); renderTotals(); renderSettle(); renderBalances(); renderCategory(); renderLedger(); renderPayments(); }
+  function render(){ applyViewOnly(); ensureMonths(); renderFilters(); renderTotals(); renderSettle(); renderBalances(); renderCategory(); renderLedger(); renderPayments(); }
+
+  // Lock every write control when the signed-in profile is view-only (e.g. Logesh)
+  function applyViewOnly(){
+    var vo = !!me && !canEdit();
+    if(el("voNote")) el("voNote").hidden = !vo;
+    if(el("addSection")) el("addSection").hidden = vo;             // add expense
+    if(el("recordPaymentWrap")) el("recordPaymentWrap").hidden = vo; // record a payment
+    if(el("peopleCurrencyDetails")) el("peopleCurrencyDetails").hidden = vo; // rename/add/remove/currency
+    if(el("currencyTop")) el("currencyTop").disabled = vo;          // header currency switch
+  }
 
   function renderFilters(){
     var cat=el("fCat"); if(cat && !focusWithin("fCat")){ var cv=filt.cat; cat.textContent="";
@@ -776,17 +789,20 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var to=document.createElement("span"); to.className="nm"; to.textContent=nameOf(t.to);
       who.appendChild(f); who.appendChild(a); who.appendChild(to);
       var amt=document.createElement("span"); amt.className="amt num"; amt.textContent=fmt(t.amt);
-      var act=document.createElement("span"); act.className="act";
-      var btn=document.createElement("button"); btn.className="markpaid"; btn.type="button"; btn.textContent="Mark paid";
-      var armed=false, armT;
-      btn.addEventListener("click", function(){
-        if(!armed){ armed=true; btn.classList.add("confirm"); btn.textContent="Confirm?";
-          armT=setTimeout(function(){ armed=false; btn.classList.remove("confirm"); btn.textContent="Mark paid"; },3000); return; }
-        clearTimeout(armT);
-        recordPayment(t.from, t.to, t.amt, nameOf(t.from)+" paid "+nameOf(t.to));
-      });
-      act.appendChild(btn);
-      row.appendChild(who); row.appendChild(amt); row.appendChild(act); box.appendChild(row); }); }
+      row.appendChild(who); row.appendChild(amt);
+      if(canEdit()){
+        var act=document.createElement("span"); act.className="act";
+        var btn=document.createElement("button"); btn.className="markpaid"; btn.type="button"; btn.textContent="Mark paid";
+        var armed=false, armT;
+        btn.addEventListener("click", function(){
+          if(!armed){ armed=true; btn.classList.add("confirm"); btn.textContent="Confirm?";
+            armT=setTimeout(function(){ armed=false; btn.classList.remove("confirm"); btn.textContent="Mark paid"; },3000); return; }
+          clearTimeout(armT);
+          recordPayment(t.from, t.to, t.amt, nameOf(t.from)+" paid "+nameOf(t.to));
+        });
+        act.appendChild(btn); row.appendChild(act);
+      }
+      box.appendChild(row); }); }
 
   function renderBalances(){ var g=el("balances"); g.textContent="";
     if(!people.length){ var e=document.createElement("p"); e.className="empty"; e.textContent=ready?"No people yet.":"Loading…"; g.appendChild(e); return; }
@@ -1004,9 +1020,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       sub.textContent=[dt, s.note].filter(Boolean).join("  ·  ")||"payment";
       b.appendChild(main); b.appendChild(sub);
       var amt=document.createElement("div"); amt.className="pamt"; amt.textContent=fmt(s.amountMinor);
-      var del=document.createElement("button"); del.className="del"; del.type="button"; del.title="Delete"; del.setAttribute("aria-label","Delete payment"); del.textContent="×";
-      del.addEventListener("click", function(){ deletePayment(s.id); });
-      row.appendChild(b); row.appendChild(amt); row.appendChild(del); box.appendChild(row); }); }
+      row.appendChild(b); row.appendChild(amt);
+      if(canEdit()){ var del=document.createElement("button"); del.className="del"; del.type="button"; del.title="Delete"; del.setAttribute("aria-label","Delete payment"); del.textContent="×";
+        del.addEventListener("click", function(){ deletePayment(s.id); }); row.appendChild(del); }
+      box.appendChild(row); }); }
 
   function renderPeopleControls(){
     var sel=el("paidBy"), prev=sel.value; sel.textContent="";
@@ -1076,6 +1093,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   /* ---------- writes ---------- */
   function withServer(payload, okMsg){
+    if(me && !canEdit()){ toast("You have view-only access."); return Promise.resolve(); }
     if(!CONFIGURED){ return Promise.resolve(localWrite(payload)); }
     busy=true; setSync(true,"Saving…");
     return apiPost(payload).then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); if(okMsg) toast(okMsg); })
