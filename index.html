@@ -794,10 +794,12 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     sel.value=monthFilter; }
 
   function renderCategory(){ var card=el("catCard"), box=el("catBreakdown"); box.textContent="";
-    var list=monthExpenses();
+    var list=applyFilters(monthExpenses());
     if(!list.length){ card.hidden=true; return; }
     card.hidden=false;
-    el("catHead").textContent = monthFilter==="all" ? "Browse by category — all time" : "Browse by category — "+monthLabel(monthFilter);
+    var parts=[]; if(filt.person) parts.push(nameOf(filt.person));
+    parts.push(monthFilter==="all" ? "all time" : monthLabel(monthFilter));
+    el("catHead").textContent = "Browse by category — "+parts.join(" · ");
     var tot={}, grand=0;
     list.forEach(function(e){ var c=e.category||"Other"; tot[c]=(tot[c]||0)+e.amountMinor; grand+=e.amountMinor; });
     var rows=Object.keys(tot).map(function(c){ return {c:c, v:tot[c]}; }).sort(function(a,b){ return b.v-a.v; });
@@ -1303,7 +1305,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   el("monthSel").addEventListener("change", function(){ monthFilter=el("monthSel").value; ledgerExpanded=false; renderTotals(); renderCategory(); renderLedger(); });
 
-  function applyFilterInputs(){ ledgerExpanded=false; renderFilters(); renderLedger(); }
+  function applyFilterInputs(){ ledgerExpanded=false; renderFilters(); renderCategory(); renderLedger(); }
   el("fCat").addEventListener("change", function(){ filt.cat=el("fCat").value; applyFilterInputs(); });
   el("fPerson").addEventListener("change", function(){ filt.person=el("fPerson").value; applyFilterInputs(); });
   el("fMin").addEventListener("input", function(){ var v=parseAmount(el("fMin").value); filt.min=(v>0?v:null); applyFilterInputs(); });
