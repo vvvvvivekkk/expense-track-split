@@ -520,6 +520,10 @@
       <p class="eyebrow" id="pfSettleHead">Settle up</p>
       <div id="pfSettle"></div>
     </div>
+    <div id="pfSettledWrap" hidden>
+      <p class="eyebrow" id="pfSettledHead">Settled payments</p>
+      <div id="pfSettled"></div>
+    </div>
     <p class="eyebrow" id="pfListHead">Expenses they're in</p>
     <div id="pfList"></div>
   </div>
@@ -959,6 +963,9 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       sec2.appendChild(sp); box.appendChild(sec2);
     }
 
+    // ---- settled payments by each person (scoped) ----
+    renderPfSettled(id, p, mLabel);
+
     // ---- expense list (scoped) ----
     var list=el("pfList"); list.textContent="";
     var lh=el("pfListHead"); if(lh) lh.textContent = "Expenses they're in"+(mLabel?" — "+mLabel:"");
@@ -977,6 +984,36 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var k=document.createElement("span"); k.className="k"; k.textContent="their share";
       sh.appendChild(document.createTextNode(fmt(r.mine))); sh.appendChild(k);
       row.appendChild(body); row.appendChild(sh); list.appendChild(row);
+    });
+  }
+
+  // Settle-up payments this person made/received, aggregated by the other person
+  function renderPfSettled(id, p, mLabel){
+    var wrap=el("pfSettledWrap"), box=el("pfSettled"); if(!wrap||!box) return;
+    var mine=(payments||[]).filter(function(s){
+      if(pfMonth && monthOf(s)!==pfMonth) return false;
+      return s.from===id || s.to===id;
+    });
+    if(!mine.length){ wrap.hidden=true; return; }
+    wrap.hidden=false;
+    el("pfSettledHead").textContent = "Settled payments"+(mLabel?" — "+mLabel:"");
+    // aggregate per other person + direction
+    var agg={};
+    mine.forEach(function(s){ var other = s.from===id ? s.to : s.from; var dir = s.from===id ? "paid" : "got";
+      var k=other+"|"+dir; if(!agg[k]) agg[k]={other:other, dir:dir, amt:0}; agg[k].amt+=s.amountMinor; });
+    box.textContent="";
+    Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return b.amt-a.amt;}).forEach(function(r){
+      var got = r.dir==="got";
+      var row=document.createElement("div"); row.className="pf-set "+(got?"get":"owe");
+      var ic=document.createElement("div"); ic.className="ic"; ic.textContent = got?"←":"→";
+      var txt=document.createElement("div"); txt.className="txt";
+      var main=document.createElement("div"); main.className="main";
+      var sub=document.createElement("div"); sub.className="sub";
+      if(got){ main.textContent=nameOf(r.other)+" paid "+p.name; sub.textContent="settled with "+p.name; }
+      else { main.textContent=p.name+" paid "+nameOf(r.other); sub.textContent=p.name+" settled up"; }
+      txt.appendChild(main); txt.appendChild(sub);
+      var amt=document.createElement("div"); amt.className="amt num"; amt.textContent=fmt(r.amt);
+      row.appendChild(ic); row.appendChild(txt); row.appendChild(amt); box.appendChild(row);
     });
   }
 
