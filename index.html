@@ -481,18 +481,19 @@
       <summary><span class="chev">›</span> Payments &amp; settle-ups <span id="payCount"></span></summary>
       <div class="card card-pad" style="margin-top:10px">
         <div id="recordPaymentWrap">
-          <p class="eyebrow">Settle a payment you made</p>
+          <p class="eyebrow" id="settleFormTitle">Settle a payment you made</p>
           <p class="hint" style="color:var(--muted);font-size:.78rem;margin:0 0 8px">The person you paid gets a request and has to accept it before it counts.</p>
           <div class="manual">
-            <div class="mrow" style="align-items:center">
-              <span style="font-size:.9rem;color:var(--muted);white-space:nowrap">You paid</span>
+            <div class="mrow" style="align-items:center;flex-wrap:wrap;gap:8px">
+              <span id="payFromLabel" style="font-size:.9rem;color:var(--muted);white-space:nowrap">You paid</span>
+              <select id="payFrom" hidden aria-label="Who paid"></select>
+              <span id="payToLabel" hidden style="font-size:.9rem;color:var(--muted)">→</span>
               <select id="payTo" aria-label="Paid to"></select>
             </div>
             <div class="mrow">
               <span class="amount-field" style="flex:1"><span class="cur">₹</span>
                 <input id="payAmt" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount"></span>
             </div>
-            <select id="payFrom" hidden aria-hidden="true"></select>
             <button type="button" class="primary" id="payBtn" style="margin-top:2px">Send settle request</button>
           </div>
         </div>
@@ -763,7 +764,10 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     var vo = !!me && !canEdit();
     if(el("voNote")) el("voNote").hidden = !vo;
     if(el("addSection")) el("addSection").hidden = vo;             // add expense
-    if(el("recordPaymentWrap")) el("recordPaymentWrap").hidden = vo; // record a payment
+    // The settle form stays available to everyone (view-only included) — it only
+    // creates a request the other person must accept.
+    if(el("recordPaymentWrap")) el("recordPaymentWrap").hidden = false;
+    syncSettleForm();
     if(el("peopleCurrencyDetails")) el("peopleCurrencyDetails").hidden = vo; // rename/add/remove/currency
     if(el("currencyTop")) el("currencyTop").disabled = vo;          // header currency switch
     // Adding / removing / renaming people is admin-only (server enforces it too).
@@ -856,7 +860,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       row.appendChild(who); row.appendChild(amt);
       // You settle YOUR OWN debt (rows where you're the one paying); it sends a
       // request the payee must accept. Admin can settle on anyone's behalf.
-      if(canEdit() && (t.from===me || isAdmin())){
+      if(canSettle() && (t.from===me || isAdmin())){
         var act=document.createElement("span"); act.className="act";
         var pend=pendingSettleFrom(t.from);
         if(pend){
@@ -882,7 +886,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function pendingDeleteFor(settleId){ for(var i=0;i<requests.length;i++){ var r=requests[i]; if(r.status==="pending" && r.kind==="deleteSettlement" && r.targetId===settleId) return r; } return null; }
 
   function sendSettleRequest(from,to,amtMinor){
-    if(!canEdit()){ toast("View-only — you can't settle."); return; }
+    if(!canSettle()){ toast("Log in to settle."); return; }
     if(from!==me && !isAdmin()){ toast("You can only settle your own debt."); return; }
     if(pendingSettleFrom(from)){ toast("There's already a settle request waiting for "+nameOf(from)+"."); return; }
     withServer({action:"addSettleRequest", from:from, to:to, amount:amtMinor/100, note:nameOf(from)+" paid "+nameOf(to)},
@@ -915,7 +919,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var row=document.createElement("div"); row.className="settle-row";
       var who=document.createElement("div"); who.className="who"; who.style.fontSize=".9rem"; who.textContent=reqLabel(r);
       var act=document.createElement("span"); act.className="act"; act.style.display="flex"; act.style.gap="6px";
-      if(canEdit()){
+      if(canSettle()){
         var acc=document.createElement("button"); acc.className="markpaid"; acc.type="button"; acc.textContent="Accept";
         acc.addEventListener("click", function(){ respondRequest(r.id, true); });
         var rej=document.createElement("button"); rej.className="ghostbtn"; rej.type="button"; rej.textContent="Reject";
@@ -1311,7 +1315,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   /* ---------- writes ---------- */
   function withServer(payload, okMsg){
-    if(me && !canEdit()){ toast("You have view-only access."); return Promise.resolve(); }
+    var settleAction = payload.action==="addSettleRequest" || payload.action==="respondSettleRequest";
+    if(me && !canEdit() && !settleAction){ toast("You have view-only access."); return Promise.resolve(); }
     if(!CONFIGURED){ return Promise.resolve(localWrite(payload)); }
     busy=true; setSync(true,"Saving…");
     return apiPost(payload).then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); if(okMsg) toast(okMsg); })
@@ -1409,13 +1414,23 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
                 category:el("category").value,date:date,items:d.items},"Expense added")
       .then(function(){ el("desc").value=""; resetItems(ADD_CTX); el("desc").focus(); }); });
 
+  // Admin picks both payer and receiver; everyone else settles their own (from = me).
+  function syncSettleForm(){
+    var adm=isAdmin();
+    if(el("payFrom")) el("payFrom").hidden = !adm;
+    if(el("payToLabel")) el("payToLabel").hidden = !adm;
+    if(el("payFromLabel")) el("payFromLabel").textContent = adm ? "From" : "You paid";
+    if(el("settleFormTitle")) el("settleFormTitle").textContent = adm ? "Record a payment" : "Settle a payment you made";
+  }
   el("payBtn").addEventListener("click", function(){
-    var to=el("payTo").value, amt=parseAmount(el("payAmt").value);
     if(!me){ toast("Log in first."); return; }
-    if(!to){ toast("Pick who you paid."); return; }
-    if(to===me){ toast("Pick a different person."); return; }
+    var from = isAdmin() ? el("payFrom").value : me;
+    var to=el("payTo").value, amt=parseAmount(el("payAmt").value);
+    if(!from){ toast("Pick who paid."); return; }
+    if(!to){ toast("Pick who they paid."); return; }
+    if(from===to){ toast("Pick two different people."); return; }
     if(!(amt>0)){ toast("Enter an amount."); el("payAmt").focus(); return; }
-    sendSettleRequest(me, to, amt);
+    sendSettleRequest(from, to, amt);
     el("payAmt").value=""; });
 
   el("monthSel").addEventListener("change", function(){ monthFilter=el("monthSel").value; ledgerExpanded=false; renderTotals(); renderCategory(); renderLedger(); });
@@ -1740,6 +1755,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   /* ---------- roles / permissions (role comes from the SERVER at login) ---------- */
   function canEdit(){ return !!me && (myRole==="editor"||myRole==="admin"); }
+  // Settling needs the other person's approval, so even a view-only person may do it.
+  function canSettle(){ return !!me; }
   function isAdmin(){ return !!me && myRole==="admin"; }
   function canOpen(targetId){ return isAdmin() || targetId===me; }
   function roleLabel(){ return isAdmin()?"Admin":canEdit()?"Editor":"View only"; }

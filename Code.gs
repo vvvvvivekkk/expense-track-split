@@ -62,7 +62,7 @@ var ROLE_RANK = { viewer: 0, editor: 1, admin: 2 };
 var ACTION_MIN = {
   addExpense: "editor", updateExpense: "editor", deleteExpense: "editor",
   addSettlement: "editor", deleteSettlement: "editor", setCurrency: "editor",
-  addSettleRequest: "editor", respondSettleRequest: "editor", addDeleteRequest: "editor",
+  addSettleRequest: "viewer", respondSettleRequest: "viewer", addDeleteRequest: "editor",
   addPerson: "admin", renamePerson: "admin", removePerson: "admin", resetPin: "admin"
 };
 
