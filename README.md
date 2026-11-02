@@ -85,13 +85,8 @@ folder, follow the prompts.
   (the total is the sum of the items). Use the **month filter** at the top of
   the Expenses list to see a month's spending and the **by-category** breakdown
   ("we spent ₹8k on food this month").
-- Rename people or add a person under **People & currency** (admin only) — it
-  saves to the Sheet.
-- **Currency:** the ledger is always **NT$ (TWD)** — that's what you type and
-  what debts are settled in. The currency selector is a **live-rate view**:
-  pick ₹/€/$/… and every total and balance shows roughly what it's worth today
-  (rates fetched from open.er-api.com each load). Switching currency never
-  changes the stored amounts, so "who owes whom" stays anchored in NT$.
+- Rename people, add a person, or change currency under **People & currency** —
+  it all saves to the Sheet.
 - **Tap any person's balance tile** to open their profile: how much they paid
   out, their share, their overall net, and a **person-by-person** breakdown —
   for each other person, who owes whom (mutual debts are netted / subtracted).
