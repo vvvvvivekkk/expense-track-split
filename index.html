@@ -38,6 +38,7 @@
   .total .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);}
   .total .val{font-size:1.15rem;font-weight:600;}
   .cur-top{width:auto;min-width:92px;background:var(--surface-2);border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-weight:600;font-size:.82rem;-webkit-appearance:none;appearance:none;cursor:pointer;}
+  .ratenote{margin-top:6px;font-size:.72rem;color:var(--muted);text-align:right;max-width:200px;margin-left:auto;line-height:1.3;}
 
   section{margin-bottom:22px;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);}
@@ -375,6 +376,7 @@
       <div class="label" id="totalLabel">Total spent</div>
       <div class="val num" id="totalSpent">—</div>
       <select class="cur-top" id="currencyTop" aria-label="Currency"></select>
+      <div class="ratenote" id="rateNote" hidden></div>
     </div>
   </header>
 
@@ -413,7 +415,7 @@
           </div>
           <div class="items" id="items"></div>
           <div class="items-foot">
-            <span class="items-total">Total<span class="n" id="itemsTotal">₹0.00</span></span>
+            <span class="items-total">Total<span class="n" id="itemsTotal">NT$0.00</span></span>
           </div>
         </div>
 
@@ -581,7 +583,7 @@
         <div class="split-head"><span class="lab">Items</span>
           <button type="button" class="linkbtn" id="editAddItem">+ Add item</button></div>
         <div class="items" id="editItems"></div>
-        <div class="items-foot"><span class="items-total">Total<span class="n" id="editItemsTotal">₹0.00</span></span></div>
+        <div class="items-foot"><span class="items-total">Total<span class="n" id="editItemsTotal">NT$0.00</span></span></div>
       </div>
       <div class="two">
         <label class="fld" for="editCategory"><span class="lab">Category</span><select id="editCategory"></select></label>
@@ -644,17 +646,46 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var ledgerExpanded = false;
   var LEDGER_PREVIEW = 5;
   var filt = { cat:"", person:"", min:null, max:null };
-  var CUR_OPTIONS = [["₹","₹ INR"],["NT$","NT$ TWD"],["$","$ USD"],["€","€ EUR"],["£","£ GBP"],["¥","¥ JPY/CNY"]];
+  // [symbol, label, ISO code]. The ledger is ALWAYS NT$ (TWD); other currencies
+  // are a live-rate VIEW. Amounts are stored in NT$ cents and converted for display.
+  var BASE_SYM = "NT$", BASE_CODE = "TWD";
+  var CUR_OPTIONS = [["₹","₹ INR","INR"],["NT$","NT$ TWD","TWD"],["$","$ USD","USD"],["€","€ EUR","EUR"],["£","£ GBP","GBP"],["¥","¥ JPY","JPY"],["CN¥","CN¥ CNY","CNY"]];
+  var CUR_CODE = {}; CUR_OPTIONS.forEach(function(c){ CUR_CODE[c[0]]=c[2]; });
+  var rates = { TWD: 1 };          // how many <code> per 1 NT$ (TWD); filled from a live feed
+  var ratesLoaded = false;
+  function curCode(sym){ return CUR_CODE[sym] || BASE_CODE; }
+  function curDec(code){ return code==="JPY" ? 0 : 2; }
+  // rate to convert NT$ -> the currently displayed currency (null if unavailable)
+  function viewRate(){ var r=rates[curCode(currency)]; return (typeof r==="number" && r>0) ? r : null; }
   function fillCurrency(sel, current){ sel.textContent="";
     var known=false; CUR_OPTIONS.forEach(function(c){ var o=document.createElement("option"); o.value=c[0]; o.textContent=c[1]; if(c[0]===current)known=true; sel.appendChild(o); });
     if(current && !known){ var o=document.createElement("option"); o.value=current; o.textContent=current; sel.appendChild(o); }
     sel.value=current||"₹"; }
+  // Fetch live NT$-based rates (free, no key, CORS-friendly). Falls back silently.
+  function fetchRates(){
+    try{
+      fetch("https://open.er-api.com/v6/latest/"+BASE_CODE)
+        .then(function(r){ return r.json(); })
+        .then(function(j){ if(j && j.rates){ rates=j.rates; rates[BASE_CODE]=1; ratesLoaded=true; if(ready){ render(); } } })
+        .catch(function(){ /* keep NT$-only */ });
+    }catch(_){}
+  }
   function syncCurrencyUI(){
     if(el("currency")) el("currency").value=currency;
     if(el("currencyTop")) el("currencyTop").value=currency;
-    try{ document.querySelectorAll(".cur").forEach(function(s){ s.textContent=currency; }); }catch(_){}
+    // Entry fields are always in NT$ (the ledger currency), not the view currency.
+    try{ document.querySelectorAll(".cur").forEach(function(s){ s.textContent=BASE_SYM; }); }catch(_){}
     try{ if(el("items")&&el("items").children.length) recomputeTotal(ADD_CTX); }catch(_){}
     try{ if(el("editItems")&&el("editItems").children.length) recomputeTotal(EDIT_CTX); }catch(_){}
+    renderRateNote();
+  }
+  function renderRateNote(){ var n=el("rateNote"); if(!n) return;
+    var code=curCode(currency);
+    if(code===BASE_CODE){ n.hidden=true; return; }   // viewing NT$ — nothing to note
+    var r=viewRate();
+    if(r==null){ n.hidden=false; n.textContent="Live rate unavailable — showing NT$"; return; }
+    n.hidden=false;
+    n.textContent = "Live: NT$1 ≈ "+currency+(r.toLocaleString(undefined,{maximumFractionDigits:3}))+" · you enter & settle in NT$";
   }
   var CAT_OPTIONS = [
     ["Food","🍽 Food"],["Groceries","🛒 Groceries"],["Dorm","🛏 Dorm"],["Travel","🚕 Travel"],
@@ -669,11 +700,20 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   }
 
   function el(id){ return document.getElementById(id); }
+  // Display formatter: converts NT$ (base) -> the selected view currency at the
+  // live rate. If no rate is available, falls back to showing NT$.
   function fmt(minor){ var n=minor<0; minor=Math.abs(minor);
-    return (n?"-":"")+currency+(minor/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+    var r=viewRate(), sym=currency, code=curCode(currency);
+    if(r==null){ r=1; sym=BASE_SYM; code=BASE_CODE; }
+    var val=(minor/100)*r, dec=curDec(code);
+    return (n?"-":"")+sym+val.toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
   // compact (no decimals) — for tight spots like month-bar labels
   function fmtShort(minor){ var n=minor<0; minor=Math.abs(minor);
-    return (n?"-":"")+currency+Math.round(minor/100).toLocaleString(); }
+    var r=viewRate(), sym=currency; if(r==null){ r=1; sym=BASE_SYM; }
+    return (n?"-":"")+sym+Math.round((minor/100)*r).toLocaleString(); }
+  // Base formatter: ALWAYS NT$, no conversion — for entry fields (you type NT$).
+  function fmtBase(minor){ var n=minor<0; minor=Math.abs(minor);
+    return (n?"-":"")+BASE_SYM+(minor/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
   // sort key: the expense's chosen DATE (falls back to when it was added)
   function expTime(e){ if(e.date && /^\d{4}-\d{2}-\d{2}/.test(e.date)){ var t=Date.parse(e.date+"T00:00:00"); if(!isNaN(t)) return t; } return e.createdAt||0; }
   function byDateDesc(a,b){ var d=expTime(b)-expTime(a); return d!==0 ? d : (b.createdAt||0)-(a.createdAt||0); }
@@ -1283,7 +1323,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       if(a>0){ out.push({name:nm, amount:a/100}); total+=a; }
     });
     return {items:out, total:total}; }
-  function recomputeTotal(ctx){ var d=itemsData(ctx); el(ctx.total).textContent=fmt(d.total); }
+  function recomputeTotal(ctx){ var d=itemsData(ctx); el(ctx.total).textContent=fmtBase(d.total); }
   function resetItems(ctx){ el(ctx.items).textContent=""; addItemRow(ctx); recomputeTotal(ctx); }
   function fillItems(ctx, items, fallbackAmountMinor){
     el(ctx.items).textContent="";
@@ -1578,7 +1618,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     el("peAmt").value = (s.amountMinor/100).toFixed(2);
     el("peDate").value = (s.date && /^\d{4}-\d{2}-\d{2}/.test(s.date)) ? s.date.slice(0,10) : todayStr();
     el("peNote").value = s.note || "";
-    el("payEditForm").querySelector(".cur").textContent = currency;
+    el("payEditForm").querySelector(".cur").textContent = BASE_SYM;
     el("payEditOverlay").hidden=false; try{ document.body.style.overflow="hidden"; }catch(_){}
     el("payEditClose").focus();
   }
@@ -1716,6 +1756,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   }
 
   /* ---------- boot ---------- */
+  fetchRates();                 // live exchange rates for the currency view
+  setInterval(fetchRates, 1000*60*60); // refresh hourly
   if(!CONFIGURED){
     el("banner").className="banner warn"; el("banner").style.display="block";
     el("banner").textContent="Not connected to a Google Sheet yet — add your Apps Script URL in index.html (API_URL). Running in local-only mode for now.";
