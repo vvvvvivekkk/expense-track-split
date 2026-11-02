@@ -506,21 +506,6 @@
       </div>
     </details>
 
-    <details class="settings" id="securityDetails">
-      <summary><span class="chev">›</span> Your PIN</summary>
-      <div class="card card-pad" style="margin-top:10px">
-        <p class="eyebrow">Change your PIN</p>
-        <div class="addp">
-          <input id="newPin1" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" autocomplete="off">
-          <input id="newPin2" type="password" inputmode="numeric" maxlength="4" placeholder="Confirm" autocomplete="off">
-          <button type="button" id="changePinBtn">Save</button>
-        </div>
-        <div id="adminPinReset" hidden style="margin-top:14px">
-          <p class="eyebrow">Reset someone's PIN (admin)</p>
-          <div id="adminPinRows"></div>
-        </div>
-      </div>
-    </details>
   </section>
 
   <p class="foot"><span class="sync" id="sync" hidden><span class="d"></span><span id="syncText">Synced to Google Sheet</span></span></p>
@@ -768,7 +753,6 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     if(el("renameEyebrow")) el("renameEyebrow").hidden = !adm;
     if(el("peopleSettings")) el("peopleSettings").hidden = !adm;
     if(el("addpRow")) el("addpRow").hidden = !adm;
-    if(typeof renderAdminPinReset==="function") renderAdminPinReset();
   }
 
   function renderFilters(){
@@ -1226,7 +1210,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
 
   /* ---------- writes ---------- */
   function withServer(payload, okMsg){
-    if(me && !canEdit() && payload.action!=="changePin"){ toast("You have view-only access."); return Promise.resolve(); }
+    if(me && !canEdit()){ toast("You have view-only access."); return Promise.resolve(); }
     if(!CONFIGURED){ return Promise.resolve(localWrite(payload)); }
     busy=true; setSync(true,"Saving…");
     return apiPost(payload).then(function(d){ applyData(d); setSync(true,"Synced to Google Sheet"); if(okMsg) toast(okMsg); })
@@ -1360,32 +1344,6 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     people.forEach(function(p){ selected[p.id]=!allOn; }); renderPeopleControls(); });
   el("addPersonBtn").addEventListener("click", function(){ var v=el("newPerson").value.trim(); if(!v){ el("newPerson").focus(); return; } addPerson(v); el("newPerson").value=""; });
   el("newPerson").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); el("addPersonBtn").click(); } });
-
-  // ---- change your own PIN ----
-  el("changePinBtn").addEventListener("click", function(){
-    var a=el("newPin1").value.trim(), b=el("newPin2").value.trim();
-    if(!/^\d{4}$/.test(a)){ toast("PIN must be exactly 4 digits."); el("newPin1").focus(); return; }
-    if(a!==b){ toast("The two PINs don't match."); el("newPin2").focus(); return; }
-    if(!CONFIGURED){ toast("Connect the Google Sheet first."); return; }
-    withServer({action:"changePin", newPin:a}, "Your PIN was changed.").then(function(){ el("newPin1").value=""; el("newPin2").value=""; });
-  });
-
-  // ---- admin: reset another person's PIN ----
-  function renderAdminPinReset(){
-    var wrap=el("adminPinReset"); if(!wrap) return;
-    wrap.hidden = !isAdmin();
-    if(!isAdmin()) return;
-    var box=el("adminPinRows"); box.textContent="";
-    accounts.forEach(function(ac){
-      var row=document.createElement("div"); row.className="set-row";
-      var lab=document.createElement("span"); lab.textContent=ac.name+" ("+ac.role+")"; lab.style.flex="1"; lab.style.fontSize=".88rem";
-      var inp=document.createElement("input"); inp.type="password"; inp.inputMode="numeric"; inp.maxLength=4; inp.placeholder="New PIN"; inp.style.maxWidth="110px";
-      var btn=document.createElement("button"); btn.className="removep"; btn.type="button"; btn.textContent="Reset";
-      btn.style.color="var(--accent)"; btn.style.borderColor="var(--accent)";
-      btn.addEventListener("click", function(){ var v=inp.value.trim();
-        if(!/^\d{4}$/.test(v)){ toast("PIN must be 4 digits."); inp.focus(); return; }
-        withServer({action:"resetPin", targetId:ac.id, newPin:v}, "Reset "+ac.name+"'s PIN.").then(function(){ inp.value=""; }); });
-      row.appendChild(lab); row.appendChild(inp); row.appendChild(btn); box.appendChild(row); }); }
   el("currency").addEventListener("change", function(){ setCurrency(el("currency").value); });
   el("currencyTop").addEventListener("change", function(){ setCurrency(el("currencyTop").value); });
 
