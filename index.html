@@ -941,15 +941,15 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     var id=pfId, p=null; for(var i=0;i<people.length;i++) if(people[i].id===id) p=people[i]; if(!p) return;
     var all=scopedData(id, null);
     var sc = pfMonth ? scopedData(id, pfMonth) : all;
-    var net = balances()[id]||0;
     var mLabel = pfMonth ? monthLabel(pfMonth) : "";
 
-    // ---- stat tiles ----
+    // ---- stat tiles ---- (same three metrics whether viewing a month or all months)
     var stats=el("pfStats"); stats.textContent="";
-    var tiles = pfMonth
-      ? [["Total spent "+mLabel, fmt(sc.total), ""], ["Their share", fmt(sc.share), ""], ["Others' share", fmt(sc.others), ""]]
-      : [["Paid out", fmt(all.paid), ""], ["Their share", fmt(all.share), ""],
-         [net>=0?"Gets back":"Owes", fmt(Math.abs(net)), net>0?"pos":net<0?"neg":""]];
+    var tiles = [
+      ["Total spent"+(mLabel?" "+mLabel:""), fmt(sc.total), ""],
+      ["Their share", fmt(sc.share), ""],
+      ["Others' share", fmt(sc.others), ""]
+    ];
     tiles.forEach(function(s){ var d=document.createElement("div"); d.className="pf-stat"+(s[2]?" "+s[2]:"");
       var k=document.createElement("div"); k.className="k"; k.textContent=s[0];
       var vv=document.createElement("div"); vv.className="vv num"; vv.textContent=s[1];
