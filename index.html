@@ -1666,8 +1666,17 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function roleLabel(){ return isAdmin()?"Admin":canEdit()?"Editor":"View only"; }
 
   function acctById(id){ for(var i=0;i<accounts.length;i++) if(accounts[i].id===id) return accounts[i]; return null; }
+  // Login tiles: each name once (drops a stray duplicate profile), ordered A V P L.
+  function gateAccounts(){
+    var seen={}, list=[];
+    accounts.forEach(function(a){ var k=(a.name||"").trim().toLowerCase(); if(seen[k]) return; seen[k]=true; list.push(a); });
+    list.sort(function(x,y){ var kx=(x.name||"").trim().toLowerCase(), ky=(y.name||"").trim().toLowerCase();
+      var ox=PREFERRED_ORDER[kx]!=null?PREFERRED_ORDER[kx]:100, oy=PREFERRED_ORDER[ky]!=null?PREFERRED_ORDER[ky]:100;
+      return ox-oy; });
+    return list;
+  }
   function renderGate(){ var box=el("gateProfiles"); if(!box) return; box.textContent="";
-    accounts.forEach(function(a){
+    gateAccounts().forEach(function(a){
       var b=document.createElement("button"); b.type="button"; b.className="profile";
       var av=document.createElement("div"); av.className="av"; av.style.background=avGrad(a.id); av.textContent=initial(a.name);
       var lk=document.createElement("span"); lk.className="lock"; lk.textContent="🔒"; av.appendChild(lk);
