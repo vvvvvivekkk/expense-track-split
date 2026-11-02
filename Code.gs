@@ -21,6 +21,11 @@ var SETTLE_TAB   = "Settlements";
 var PEOPLE_HEADERS  = ["id", "name", "order"];
 var EXPENSE_HEADERS = ["id", "desc", "amount", "paidBy", "splitAmong", "category", "date", "items", "createdAt"];
 var SETTLE_HEADERS  = ["id", "from", "to", "amount", "date", "note", "createdAt"];
+var REQUEST_TAB     = "Requests";
+// kind: "settle" (record a payment) or "deleteSettlement" (remove one).
+// approvers = people who must say yes; approved = those who have. When approved
+// covers approvers, the action happens. targetId = the settlement id (for deletes).
+var REQUEST_HEADERS = ["id", "kind", "from", "to", "amount", "date", "note", "targetId", "approvers", "approved", "status", "createdAt"];
 
 // =========================================================================
 // AUTH — PINs and roles live HERE on the server, never in the webpage.
@@ -57,6 +62,7 @@ var ROLE_RANK = { viewer: 0, editor: 1, admin: 2 };
 var ACTION_MIN = {
   addExpense: "editor", updateExpense: "editor", deleteExpense: "editor",
   addSettlement: "editor", deleteSettlement: "editor", setCurrency: "editor",
+  addSettleRequest: "editor", respondSettleRequest: "editor", addDeleteRequest: "editor",
   addPerson: "admin", renamePerson: "admin", removePerson: "admin", resetPin: "admin"
 };
 
@@ -192,6 +198,9 @@ function doPost(e) {
     if (ROLE_RANK[session.role] < ROLE_RANK[need]) throw new Error("not allowed for your role");
 
     if (body.action === "resetPin") { resetPin_(session, body); return json_({ ok: true, data: loadAll_() }); }
+    if (body.action === "addSettleRequest") { addSettleRequest_(session, body); return json_({ ok: true, data: loadAll_() }); }
+    if (body.action === "addDeleteRequest") { addDeleteRequest_(session, body); return json_({ ok: true, data: loadAll_() }); }
+    if (body.action === "respondSettleRequest") { respondSettleRequest_(session, body); return json_({ ok: true, data: loadAll_() }); }
 
     switch (body.action) {
       case "addExpense":      addExpense_(body); break;
@@ -250,10 +259,13 @@ function loadAll_() {
     };
   });
 
+  var requests = readRequests_().filter(function (r) { return r.status === "pending"; });
+
   return {
     people: people,
     expenses: expenses,
     settlements: settlements,
+    requests: requests,          // pending two-step settle requests
     currency: getSetting_("currency", "₹"),
     accounts: publicAccounts_()   // login tiles: {id,name,role} — no PINs
   };
@@ -350,6 +362,114 @@ function addSettlement_(b) {
     note: String(b.note || "").slice(0, 120),
     createdAt: Date.now()
   });
+}
+
+// =========================================================================
+// Two-step settle requests: one person asks to settle, the other confirms.
+// =========================================================================
+
+function csvList_(s) { return String(s || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean); }
+
+function readRequests_() {
+  return readRows_(REQUEST_TAB, REQUEST_HEADERS).map(function (r) {
+    return {
+      id: String(r.id), kind: String(r.kind || "settle"),
+      from: String(r.from || ""), to: String(r.to || ""),
+      amount: Number(r.amount) || 0, date: toYmd_(r.date),
+      note: String(r.note || ""), targetId: String(r.targetId || ""),
+      approvers: csvList_(r.approvers), approved: csvList_(r.approved),
+      status: String(r.status || "pending"), createdAt: Number(r.createdAt) || 0
+    };
+  });
+}
+
+// person-by-person: settle a debt YOU owe. The payee must accept.
+function addSettleRequest_(session, b) {
+  var from = String(b.from || ""), to = String(b.to || "");
+  if (from !== session.id && session.role !== "admin") throw new Error("you can only settle your own debt");
+  var amount = Number(b.amount);
+  if (!(amount > 0)) throw new Error("amount must be greater than zero");
+  if (!from || !to) throw new Error("from and to required");
+  if (from === to) throw new Error("from and to must differ");
+  var pending = readRequests_().filter(function (r) { return r.status === "pending" && r.kind === "settle" && r.from === from; });
+  if (pending.length) throw new Error("you already have a settle request waiting to be accepted");
+  appendObj_(REQUEST_TAB, REQUEST_HEADERS, {
+    id: newId_(), kind: "settle", from: from, to: to, amount: amount,
+    date: dateText_(b.date || ""), note: String(b.note || "").slice(0, 120),
+    targetId: "", approvers: to, approved: "", status: "pending", createdAt: Date.now()
+  });
+}
+
+// Ask to DELETE a settlement. Everyone involved (both parties) except the
+// requester must approve before it's removed.
+function addDeleteRequest_(session, b) {
+  var targetId = String(b.targetId || ""); if (!targetId) throw new Error("targetId required");
+  // find the settlement
+  var s = null, all = readRows_(SETTLE_TAB, SETTLE_HEADERS);
+  for (var i = 0; i < all.length; i++) if (String(all[i].id) === targetId) s = all[i];
+  if (!s) throw new Error("settlement not found");
+  var parties = [String(s.from), String(s.to)];
+  var approvers = parties.filter(function (p) { return p && p !== session.id; });
+  // de-dup
+  var seen = {}, appr = []; approvers.forEach(function (p) { if (!seen[p]) { seen[p] = 1; appr.push(p); } });
+  if (!appr.length) throw new Error("nothing to approve");   // shouldn't happen
+  // one pending delete request per settlement
+  var dup = readRequests_().filter(function (r) { return r.status === "pending" && r.kind === "deleteSettlement" && r.targetId === targetId; });
+  if (dup.length) throw new Error("there is already a pending request to delete this settlement");
+  appendObj_(REQUEST_TAB, REQUEST_HEADERS, {
+    id: newId_(), kind: "deleteSettlement", from: session.id, to: "",
+    amount: Number(s.amount) || 0, date: dateText_(""), note: String(b.note || "").slice(0, 120),
+    targetId: targetId, approvers: appr.join(","), approved: "", status: "pending", createdAt: Date.now()
+  });
+}
+
+// Accept or reject a pending request. Works for both kinds.
+function respondSettleRequest_(session, b) {
+  var id = String(b.id || ""); if (!id) throw new Error("id required");
+  var accept = !!b.accept;
+  var sh = getOrCreate_(REQUEST_TAB, REQUEST_HEADERS);
+  var r = findRow_(sh, id);
+  if (r < 0) throw new Error("request not found");
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var cur = sh.getRange(r, 1, 1, head.length).getValues()[0];
+  var obj = {}; for (var i = 0; i < head.length; i++) obj[head[i]] = cur[i];
+  if (String(obj.status) !== "pending") throw new Error("this request was already answered");
+
+  var approvers = csvList_(obj.approvers), approved = csvList_(obj.approved);
+  var isApprover = approvers.indexOf(session.id) >= 0;
+  if (!isApprover && session.role !== "admin") throw new Error("you're not asked to approve this");
+  if (approved.indexOf(session.id) >= 0) throw new Error("you already approved this");
+
+  if (!accept) {
+    obj.status = "rejected";
+  } else {
+    if (isApprover) approved.push(session.id);
+    obj.approved = approved.join(",");
+    // all required approvers in? then finalize.
+    var allIn = approvers.every(function (p) { return approved.indexOf(p) >= 0; });
+    if (allIn || (session.role === "admin")) {
+      obj.status = "accepted";
+      if (String(obj.kind) === "settle") {
+        appendObj_(SETTLE_TAB, SETTLE_HEADERS, {
+          id: newId_(), from: String(obj.from), to: String(obj.to),
+          amount: Number(obj.amount) || 0, date: toYmd_(obj.date),
+          note: String(obj.note || "") || (nameFor_(obj.from) + " paid " + nameFor_(obj.to)),
+          createdAt: Date.now()
+        });
+      } else if (String(obj.kind) === "deleteSettlement") {
+        deleteRowById_(SETTLE_TAB, SETTLE_HEADERS, String(obj.targetId));
+      }
+    }
+    // else: stays pending, just records this approval
+  }
+  var row = head.map(function (h) { return obj[h] !== undefined ? obj[h] : ""; });
+  sh.getRange(r, 1, 1, head.length).setValues([row]);
+}
+
+function nameFor_(id) {
+  var ppl = readRows_(PEOPLE_TAB, PEOPLE_HEADERS);
+  for (var i = 0; i < ppl.length; i++) if (String(ppl[i].id) === String(id)) return String(ppl[i].name);
+  return "Someone";
 }
 
 // =========================================================================

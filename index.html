@@ -381,6 +381,13 @@
   <div class="banner" id="banner"></div>
   <div class="banner info" id="voNote" hidden style="display:block">👀 View-only access — you can browse everything but can't make changes.</div>
 
+  <section id="requestsSection" hidden>
+    <div class="card card-pad" id="requestsCard">
+      <div class="toolbar"><p class="eyebrow">Settle requests</p></div>
+      <div id="requestsBody"></div>
+    </div>
+  </section>
+
   <section id="settleSection">
     <div class="card card-pad" id="settleCard">
       <div class="toolbar">
@@ -474,17 +481,19 @@
       <summary><span class="chev">›</span> Payments &amp; settle-ups <span id="payCount"></span></summary>
       <div class="card card-pad" style="margin-top:10px">
         <div id="recordPaymentWrap">
-          <p class="eyebrow">Record a payment</p>
+          <p class="eyebrow">Settle a payment you made</p>
+          <p class="hint" style="color:var(--muted);font-size:.78rem;margin:0 0 8px">The person you paid gets a request and has to accept it before it counts.</p>
           <div class="manual">
-            <div class="mrow">
-              <select id="payFrom" aria-label="Who paid"></select>
+            <div class="mrow" style="align-items:center">
+              <span style="font-size:.9rem;color:var(--muted);white-space:nowrap">You paid</span>
               <select id="payTo" aria-label="Paid to"></select>
             </div>
             <div class="mrow">
               <span class="amount-field" style="flex:1"><span class="cur">₹</span>
                 <input id="payAmt" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount"></span>
             </div>
-            <button type="button" class="primary" id="payBtn" style="margin-top:2px">Record payment</button>
+            <select id="payFrom" hidden aria-hidden="true"></select>
+            <button type="button" class="primary" id="payBtn" style="margin-top:2px">Send settle request</button>
           </div>
         </div>
         <p class="eyebrow" style="margin-top:18px">History</p>
@@ -503,6 +512,15 @@
         </div>
         <p class="eyebrow">Currency</p>
         <select id="currency" style="max-width:240px"></select>
+      </div>
+    </details>
+
+    <details class="settings" id="adminPinDetails" hidden>
+      <summary><span class="chev">›</span> Set PINs (admin)</summary>
+      <div class="card card-pad" style="margin-top:10px">
+        <p class="eyebrow">Set each person's PIN</p>
+        <p class="hint" style="color:var(--muted);font-size:.8rem;margin:0 0 10px">Give these out in person. Don't share an editor's PIN with a view-only person.</p>
+        <div id="adminPinRows"></div>
       </div>
     </details>
 
@@ -638,7 +656,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   var LOCAL_KEY = "split4_local_v1";
   var POLL_MS = 10000;
 
-  var people = [], expenses = [], payments = [], currency = "₹";
+  var people = [], expenses = [], payments = [], requests = [], currency = "₹";
   var selected = {}, orderIdx = {}, ready = false, busy = false, peopleSig = "";
   var monthFilter = "all";
   var ledgerExpanded = false;
@@ -738,7 +756,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.remove("show"); },2600); }
 
   /* ---------- render ---------- */
-  function render(){ applyViewOnly(); ensureMonths(); renderFilters(); renderTotals(); renderSettle(); renderBalances(); renderCategory(); renderLedger(); renderPayments(); }
+  function render(){ applyViewOnly(); ensureMonths(); renderFilters(); renderTotals(); renderRequests(); renderSettle(); renderBalances(); renderCategory(); renderLedger(); renderPayments(); }
 
   // Lock every write control when the signed-in profile is view-only (e.g. Logesh)
   function applyViewOnly(){
@@ -753,6 +771,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     if(el("renameEyebrow")) el("renameEyebrow").hidden = !adm;
     if(el("peopleSettings")) el("peopleSettings").hidden = !adm;
     if(el("addpRow")) el("addpRow").hidden = !adm;
+    if(typeof renderAdminPins==="function") renderAdminPins();
   }
 
   function renderFilters(){
@@ -835,19 +854,89 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       who.appendChild(f); who.appendChild(a); who.appendChild(to);
       var amt=document.createElement("span"); amt.className="amt num"; amt.textContent=fmt(t.amt);
       row.appendChild(who); row.appendChild(amt);
-      if(canEdit()){
+      // You settle YOUR OWN debt (rows where you're the one paying); it sends a
+      // request the payee must accept. Admin can settle on anyone's behalf.
+      if(canEdit() && (t.from===me || isAdmin())){
         var act=document.createElement("span"); act.className="act";
-        var btn=document.createElement("button"); btn.className="markpaid"; btn.type="button"; btn.textContent="Mark paid";
-        var armed=false, armT;
-        btn.addEventListener("click", function(){
-          if(!armed){ armed=true; btn.classList.add("confirm"); btn.textContent="Confirm?";
-            armT=setTimeout(function(){ armed=false; btn.classList.remove("confirm"); btn.textContent="Mark paid"; },3000); return; }
-          clearTimeout(armT);
-          recordPayment(t.from, t.to, t.amt, nameOf(t.from)+" paid "+nameOf(t.to));
-        });
-        act.appendChild(btn); row.appendChild(act);
+        var pend=pendingSettleFrom(t.from);
+        if(pend){
+          var w=document.createElement("span"); w.className="hint"; w.style.fontSize=".72rem"; w.style.color="var(--muted)";
+          w.textContent="waiting for "+nameOf(pend.to); act.appendChild(w);
+        } else {
+          var btn=document.createElement("button"); btn.className="markpaid"; btn.type="button";
+          btn.textContent = (t.from===me) ? "Settle" : "Settle for "+nameOf(t.from);
+          btn.addEventListener("click", function(){ sendSettleRequest(t.from, t.to, t.amt); });
+          act.appendChild(btn);
+        }
+        row.appendChild(act);
       }
       box.appendChild(row); }); }
+
+  // ---- two-step approval requests (settle + delete) ----
+  function myPendingSettleOut(){ for(var i=0;i<requests.length;i++){ var r=requests[i]; if(r.status==="pending" && r.kind==="settle" && r.from===me) return r; } return null; }
+  function myPendingOut(){ return myPendingSettleOut(); }   // settle buttons gate on an outstanding settle only
+  function pendingSettleFrom(id){ for(var i=0;i<requests.length;i++){ var r=requests[i]; if(r.status==="pending" && r.kind==="settle" && r.from===id) return r; } return null; }
+  // requests that need MY approval (I'm an approver and haven't approved yet)
+  function requestsForMe(){ return requests.filter(function(r){ return r.status==="pending" && r.approvers.indexOf(me)>=0 && r.approved.indexOf(me)<0; }); }
+  function myOutgoing(){ return requests.filter(function(r){ return r.status==="pending" && r.from===me; }); }
+  function pendingDeleteFor(settleId){ for(var i=0;i<requests.length;i++){ var r=requests[i]; if(r.status==="pending" && r.kind==="deleteSettlement" && r.targetId===settleId) return r; } return null; }
+
+  function sendSettleRequest(from,to,amtMinor){
+    if(!canEdit()){ toast("View-only — you can't settle."); return; }
+    if(from!==me && !isAdmin()){ toast("You can only settle your own debt."); return; }
+    if(pendingSettleFrom(from)){ toast("There's already a settle request waiting for "+nameOf(from)+"."); return; }
+    withServer({action:"addSettleRequest", from:from, to:to, amount:amtMinor/100, note:nameOf(from)+" paid "+nameOf(to)},
+      "Settle request sent to "+nameOf(to)+".");
+  }
+  function requestDeleteSettlement(settleId){
+    if(!canEdit()){ toast("View-only — you can't do that."); return; }
+    if(pendingDeleteFor(settleId)){ toast("A delete request for this is already pending."); return; }
+    withServer({action:"addDeleteRequest", targetId:settleId}, "Delete request sent — needs approval.");
+  }
+  function respondRequest(id, accept){
+    withServer({action:"respondSettleRequest", id:id, accept:accept}, accept?"Approved.":"Rejected.");
+  }
+
+  function reqLabel(r){
+    if(r.kind==="settle") return nameOf(r.from)+" says they paid you "+fmt(Math.round(r.amount*100));
+    // deleteSettlement
+    return nameOf(r.from)+" wants to delete a settlement of "+fmt(Math.round(r.amount*100));
+  }
+  function renderRequests(){
+    var sec=el("requestsSection"), box=el("requestsBody"); if(!sec||!box) return;
+    if(!me){ sec.hidden=true; return; }
+    box.textContent="";
+    var forMe=requestsForMe(), mine=myOutgoing();
+    if(!forMe.length && !mine.length){ sec.hidden=true; return; }
+    sec.hidden=false;
+
+    // requests waiting for MY approval
+    forMe.forEach(function(r){
+      var row=document.createElement("div"); row.className="settle-row";
+      var who=document.createElement("div"); who.className="who"; who.style.fontSize=".9rem"; who.textContent=reqLabel(r);
+      var act=document.createElement("span"); act.className="act"; act.style.display="flex"; act.style.gap="6px";
+      if(canEdit()){
+        var acc=document.createElement("button"); acc.className="markpaid"; acc.type="button"; acc.textContent="Accept";
+        acc.addEventListener("click", function(){ respondRequest(r.id, true); });
+        var rej=document.createElement("button"); rej.className="ghostbtn"; rej.type="button"; rej.textContent="Reject";
+        rej.style.color="var(--neg)"; rej.style.borderColor="var(--neg)"; rej.style.padding="6px 12px";
+        rej.addEventListener("click", function(){ respondRequest(r.id, false); });
+        act.appendChild(acc); act.appendChild(rej);
+      } else { var vo=document.createElement("span"); vo.className="hint"; vo.style.color="var(--muted)"; vo.style.fontSize=".72rem"; vo.textContent="view only"; act.appendChild(vo); }
+      row.appendChild(who); row.appendChild(act); box.appendChild(row);
+    });
+
+    // my own outgoing requests still waiting on others
+    mine.forEach(function(r){
+      if(forMe.indexOf(r)>=0) return;
+      var waitOn=r.approvers.filter(function(p){ return r.approved.indexOf(p)<0; }).map(nameOf).join(", ");
+      var o=document.createElement("div"); o.className="settle-row";
+      var ow=document.createElement("div"); ow.className="who"; ow.style.fontSize=".85rem"; ow.style.color="var(--muted)";
+      var what = r.kind==="settle" ? ("your "+fmt(Math.round(r.amount*100))+" settlement") : ("your request to delete a "+fmt(Math.round(r.amount*100))+" settlement");
+      ow.textContent="Waiting for "+(waitOn||"approval")+" to accept "+what;
+      o.appendChild(ow); box.appendChild(o);
+    });
+  }
 
   function renderBalances(){ var g=el("balances"); g.textContent="";
     if(!people.length){ var e=document.createElement("p"); e.className="empty"; e.textContent=ready?"No people yet.":"Loading…"; g.appendChild(e); return; }
@@ -1124,12 +1213,16 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       b.appendChild(main); b.appendChild(sub);
       var amt=document.createElement("div"); amt.className="pamt"; amt.textContent=fmt(s.amountMinor);
       row.appendChild(b); row.appendChild(amt);
+      var pendDel=pendingDeleteFor(s.id);
+      if(pendDel){ var pd=document.createElement("span"); pd.className="hint"; pd.style.fontSize=".7rem"; pd.style.color="var(--muted)"; pd.style.marginLeft="6px"; pd.textContent="delete pending"; sub.appendChild(document.createTextNode("  ·  ")); sub.appendChild(pd); }
       if(canEdit()){
         row.classList.add("tap"); row.setAttribute("role","button"); row.setAttribute("tabindex","0"); row.title="Edit payment";
         row.addEventListener("click", function(){ openPayEdit(s); });
         row.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); openPayEdit(s); } });
-        var del=document.createElement("button"); del.className="del"; del.type="button"; del.title="Delete"; del.setAttribute("aria-label","Delete payment"); del.textContent="×";
-        del.addEventListener("click", function(ev){ ev.stopPropagation(); deletePayment(s.id); }); row.appendChild(del);
+        if(!pendDel){
+          var del=document.createElement("button"); del.className="del"; del.type="button"; del.title="Request delete"; del.setAttribute("aria-label","Request delete"); del.textContent="×";
+          del.addEventListener("click", function(ev){ ev.stopPropagation(); requestDeleteSettlement(s.id); }); row.appendChild(del);
+        }
       }
       box.appendChild(row); }); }
 
@@ -1189,6 +1282,13 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       id:String(s.id), from:String(s.from||""), to:String(s.to||""),
       amountMinor:Math.round((Number(s.amount)||0)*100), date:String(s.date||""), note:String(s.note||""),
       createdAt:Number(s.createdAt)||0 }; });
+    requests=(d.requests||[]).map(function(r){ return {
+      id:String(r.id), kind:String(r.kind||"settle"), from:String(r.from||""), to:String(r.to||""),
+      amount:Number(r.amount)||0, date:String(r.date||""), note:String(r.note||""),
+      targetId:String(r.targetId||""),
+      approvers:Array.isArray(r.approvers)?r.approvers.map(String):String(r.approvers||"").split(",").map(function(x){return x.trim();}).filter(Boolean),
+      approved:Array.isArray(r.approved)?r.approved.map(String):String(r.approved||"").split(",").map(function(x){return x.trim();}).filter(Boolean),
+      status:String(r.status||"pending"), createdAt:Number(r.createdAt)||0 }; });
     // Login accounts (id, name, role) come from the server. In local/dev mode
     // (no backend) there are none, so synthesize them from people as admins.
     accounts = Array.isArray(d.accounts) && d.accounts.length
@@ -1310,11 +1410,12 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       .then(function(){ el("desc").value=""; resetItems(ADD_CTX); el("desc").focus(); }); });
 
   el("payBtn").addEventListener("click", function(){
-    var from=el("payFrom").value, to=el("payTo").value, amt=parseAmount(el("payAmt").value);
-    if(!from||!to){ toast("Pick both people."); return; }
-    if(from===to){ toast("Pick two different people."); return; }
+    var to=el("payTo").value, amt=parseAmount(el("payAmt").value);
+    if(!me){ toast("Log in first."); return; }
+    if(!to){ toast("Pick who you paid."); return; }
+    if(to===me){ toast("Pick a different person."); return; }
     if(!(amt>0)){ toast("Enter an amount."); el("payAmt").focus(); return; }
-    recordPayment(from,to,amt, nameOf(from)+" paid "+nameOf(to));
+    sendSettleRequest(me, to, amt);
     el("payAmt").value=""; });
 
   el("monthSel").addEventListener("change", function(){ monthFilter=el("monthSel").value; ledgerExpanded=false; renderTotals(); renderCategory(); renderLedger(); });
@@ -1345,6 +1446,25 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     people.forEach(function(p){ selected[p.id]=!allOn; }); renderPeopleControls(); });
   el("addPersonBtn").addEventListener("click", function(){ var v=el("newPerson").value.trim(); if(!v){ el("newPerson").focus(); return; } addPerson(v); el("newPerson").value=""; });
   el("newPerson").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); el("addPersonBtn").click(); } });
+
+  // ---- admin: set each person's PIN (only Vivek/admin sees this) ----
+  function renderAdminPins(){
+    var det=el("adminPinDetails"); if(!det) return;
+    det.hidden = !isAdmin();
+    if(!isAdmin()) return;
+    var box=el("adminPinRows"); if(!box) return;
+    if(focusWithin("adminPinRows")) return;   // don't redraw while typing
+    box.textContent="";
+    accounts.forEach(function(ac){
+      var row=document.createElement("div"); row.className="set-row";
+      var lab=document.createElement("span"); lab.textContent=ac.name+" ("+ac.role+")"; lab.style.flex="1"; lab.style.fontSize=".88rem";
+      var inp=document.createElement("input"); inp.type="text"; inp.inputMode="numeric"; inp.maxLength=4; inp.placeholder="New 4-digit PIN"; inp.style.maxWidth="130px"; inp.autocomplete="off";
+      var btn=document.createElement("button"); btn.className="removep"; btn.type="button"; btn.textContent="Set";
+      btn.style.color="var(--accent)"; btn.style.borderColor="var(--accent)";
+      btn.addEventListener("click", function(){ var v=inp.value.trim();
+        if(!/^\d{4}$/.test(v)){ toast("PIN must be exactly 4 digits."); inp.focus(); return; }
+        withServer({action:"resetPin", targetId:ac.id, newPin:v}, "Set "+ac.name+"'s PIN.").then(function(){ inp.value=""; }); });
+      row.appendChild(lab); row.appendChild(inp); row.appendChild(btn); box.appendChild(row); }); }
   el("currency").addEventListener("change", function(){ setCurrency(el("currency").value); });
   el("currencyTop").addEventListener("change", function(){ setCurrency(el("currencyTop").value); });
 
@@ -1586,7 +1706,7 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   function closePayEdit(){ el("payEditOverlay").hidden=true; payEditId=null; try{ document.body.style.overflow=""; }catch(_){} }
   el("payEditClose").addEventListener("click", closePayEdit);
   el("payEditOverlay").addEventListener("click", function(ev){ if(ev.target===el("payEditOverlay")) closePayEdit(); });
-  el("peDelete").addEventListener("click", function(){ var id=payEditId; if(!id) return; closePayEdit(); deletePayment(id); });
+  el("peDelete").addEventListener("click", function(){ var id=payEditId; if(!id) return; closePayEdit(); requestDeleteSettlement(id); });
   el("payEditForm").addEventListener("submit", function(ev){ ev.preventDefault();
     if(!payEditId) return;
     var from=el("peFrom").value, to=el("peTo").value;
