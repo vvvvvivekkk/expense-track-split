@@ -1011,13 +1011,14 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
       var desc=document.createElement("div"); desc.className="desc"; desc.textContent=r.e.desc||"Expense";
       var meta=document.createElement("div"); meta.className="meta";
       var dt=fmtDate(r.e); if(dt){ meta.appendChild(document.createTextNode(dt+"  ·  ")); }
-      meta.appendChild(document.createTextNode("Total "+fmt(r.e.amountMinor)+"  ·  "));
       if(r.isPayer){ var tag=document.createElement("span"); tag.className="tag"; tag.textContent=p.name+" paid"; meta.appendChild(tag); }
       else { meta.appendChild(document.createTextNode("paid by "+nameOf(r.e.paidBy))); }
       body.appendChild(desc); body.appendChild(meta);
+      // Main number is the FULL expense total (these sum to "Total spent"); their
+      // share is shown underneath.
       var sh=document.createElement("div"); sh.className="share num";
-      var k=document.createElement("span"); k.className="k"; k.textContent="their share";
-      sh.appendChild(document.createTextNode(fmt(r.mine))); sh.appendChild(k);
+      var k=document.createElement("span"); k.className="k"; k.textContent="their share "+fmt(r.mine);
+      sh.appendChild(document.createTextNode(fmt(r.e.amountMinor))); sh.appendChild(k);
       row.appendChild(body); row.appendChild(sh); list.appendChild(row);
     });
   }
