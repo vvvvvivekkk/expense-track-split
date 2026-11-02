@@ -23,6 +23,140 @@ var EXPENSE_HEADERS = ["id", "desc", "amount", "paidBy", "splitAmong", "category
 var SETTLE_HEADERS  = ["id", "from", "to", "amount", "date", "note", "createdAt"];
 
 // =========================================================================
+// AUTH — PINs and roles live HERE on the server, never in the webpage.
+//
+// How it works, plainly:
+//  - Each of the 4 accounts has a PIN (stored only as a one-way hash) and a
+//    role. Nothing here is visible from "View Source" on the website.
+//  - To log in, the browser sends {action:"login", id, pin}. We check the
+//    PIN and hand back a signed "token" (a pass stamped with a secret only
+//    this script knows). The browser keeps that token.
+//  - Every change the browser asks for must carry a valid token, and the
+//    token's role must be high enough for that action. A "viewer" token is
+//    refused for any write — so view-only really is view-only.
+//
+// Change a PIN later: the owner can do it in the app, or run resetPinManual_
+// below once from the Apps Script editor. To rotate the signing secret (makes
+// everyone log in again), delete the AUTH_SECRET script property.
+// =========================================================================
+
+// id -> starting PIN + role. Seeded into Script Properties on first use;
+// after that these defaults are ignored and the stored copy is the source of
+// truth (so PIN changes in the app stick). Roles: admin > editor > viewer.
+var DEFAULT_ACCOUNTS = {
+  p1: { name: "Akshay", role: "editor", pin: "2005" },
+  p2: { name: "Praney", role: "editor", pin: "3699" },
+  p3: { name: "Vivek",  role: "admin",  pin: "7733" },
+  p4: { name: "Logesh", role: "viewer", pin: "1234" }
+};
+
+var TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // a login lasts 30 days
+var ROLE_RANK = { viewer: 0, editor: 1, admin: 2 };
+
+// Which actions need which minimum role. "login"/"changePin" handled separately.
+var ACTION_MIN = {
+  addExpense: "editor", updateExpense: "editor", deleteExpense: "editor",
+  addSettlement: "editor", deleteSettlement: "editor", setCurrency: "editor",
+  addPerson: "admin", renamePerson: "admin", removePerson: "admin", resetPin: "admin"
+};
+
+function props_() { return PropertiesService.getScriptProperties(); }
+
+function authSecret_() {
+  var p = props_(), s = p.getProperty("AUTH_SECRET");
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); p.setProperty("AUTH_SECRET", s); }
+  return s;
+}
+
+function bytesToHex_(bytes) {
+  return bytes.map(function (b) { var v = (b < 0 ? b + 256 : b); return ("0" + v.toString(16)).slice(-2); }).join("");
+}
+
+// One-way hash of a PIN, salted with the server secret + the account id.
+function pinHash_(id, pin) {
+  return bytesToHex_(Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, authSecret_() + ":" + id + ":" + String(pin)));
+}
+
+// The live accounts table (hashes + roles), seeded from DEFAULT_ACCOUNTS once.
+function accounts_() {
+  var p = props_(), raw = p.getProperty("ACCOUNTS_V1");
+  if (raw) { try { return JSON.parse(raw); } catch (_) {} }
+  var acc = {};
+  Object.keys(DEFAULT_ACCOUNTS).forEach(function (id) {
+    var a = DEFAULT_ACCOUNTS[id];
+    acc[id] = { name: a.name, role: a.role, pinHash: pinHash_(id, a.pin) };
+  });
+  p.setProperty("ACCOUNTS_V1", JSON.stringify(acc));
+  return acc;
+}
+function saveAccounts_(acc) { props_().setProperty("ACCOUNTS_V1", JSON.stringify(acc)); }
+
+// Public account list for the login screen — names + roles only, no secrets.
+function publicAccounts_() {
+  var acc = accounts_();
+  return Object.keys(acc).map(function (id) {
+    return { id: id, name: acc[id].name, role: acc[id].role };
+  });
+}
+
+// ---- signed tokens (stateless; nothing stored server-side) ----
+function sign_(payloadB64) {
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(payloadB64, authSecret_()));
+}
+function makeToken_(id, role) {
+  var payload = Utilities.base64EncodeWebSafe(
+    JSON.stringify({ id: id, role: role, exp: Date.now() + TOKEN_TTL_MS }));
+  return payload + "." + sign_(payload);
+}
+function verifyToken_(tok) {
+  if (!tok) throw new Error("unauthorized");
+  var parts = String(tok).split(".");
+  if (parts.length !== 2 || sign_(parts[0]) !== parts[1]) throw new Error("unauthorized");
+  var data;
+  try { data = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString()); }
+  catch (_) { throw new Error("unauthorized"); }
+  if (!data || !data.exp || Date.now() > data.exp) throw new Error("session expired");
+  return data; // { id, role, exp }
+}
+
+function login_(b) {
+  var id = String(b.id || ""), pin = String(b.pin || "");
+  var acc = accounts_(), a = acc[id];
+  if (!a || a.pinHash !== pinHash_(id, pin)) throw new Error("bad pin");
+  return { token: makeToken_(id, a.role), id: id, name: a.name, role: a.role };
+}
+
+function changePin_(session, b) {
+  var newPin = String(b.newPin || "");
+  if (!/^\d{4}$/.test(newPin)) throw new Error("PIN must be exactly 4 digits");
+  var acc = accounts_(), a = acc[session.id];
+  if (!a) throw new Error("no such account");
+  a.pinHash = pinHash_(session.id, newPin);
+  saveAccounts_(acc);
+}
+
+// Admin resets someone else's PIN.
+function resetPin_(session, b) {
+  var targetId = String(b.targetId || ""), newPin = String(b.newPin || "");
+  if (!/^\d{4}$/.test(newPin)) throw new Error("PIN must be exactly 4 digits");
+  var acc = accounts_(), a = acc[targetId];
+  if (!a) throw new Error("no such account");
+  a.pinHash = pinHash_(targetId, newPin);
+  saveAccounts_(acc);
+}
+
+// Run this once from the Apps Script editor to force a PIN (e.g. if forgotten).
+// Edit the id and pin, press Run.
+function resetPinManual_() {
+  var id = "p3", pin = "7733";       // <-- change these, then Run
+  var acc = accounts_(); if (!acc[id]) throw new Error("no account " + id);
+  acc[id].pinHash = pinHash_(id, pin); saveAccounts_(acc);
+  Logger.log("PIN updated for " + id + " (" + acc[id].name + ")");
+}
+
+// =========================================================================
 // HTTP entry points
 // =========================================================================
 
@@ -42,7 +176,22 @@ function doPost(e) {
   try {
     var body = {};
     if (e && e.postData && e.postData.contents) body = JSON.parse(e.postData.contents);
-    checkToken_(body);
+
+    // Logging in needs no token — that's the point.
+    if (body.action === "login") return json_({ ok: true, data: login_(body) });
+
+    // Everything else must carry a valid, unexpired token.
+    var session = verifyToken_(body.token);
+
+    // Changing your OWN pin only needs to be logged in (any role).
+    if (body.action === "changePin") { changePin_(session, body); return json_({ ok: true, data: loadAll_() }); }
+
+    // Role gate: refuse actions above the token's role.
+    var need = ACTION_MIN[body.action];
+    if (!need) throw new Error("unknown action: " + body.action);
+    if (ROLE_RANK[session.role] < ROLE_RANK[need]) throw new Error("not allowed for your role");
+
+    if (body.action === "resetPin") { resetPin_(session, body); return json_({ ok: true, data: loadAll_() }); }
 
     switch (body.action) {
       case "addExpense":      addExpense_(body); break;
@@ -105,7 +254,8 @@ function loadAll_() {
     people: people,
     expenses: expenses,
     settlements: settlements,
-    currency: getSetting_("currency", "₹")
+    currency: getSetting_("currency", "₹"),
+    accounts: publicAccounts_()   // login tiles: {id,name,role} — no PINs
   };
 }
 

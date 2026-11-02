@@ -108,18 +108,37 @@ saving in the editor is not enough.
   Columns: `Expenses` = id, desc, amount, paidBy, splitAmong, createdAt;
   `People` = id, name, order.
 
-## Optional — lock it down with a shared token
+## Security — PINs and roles live on the server
 
-"Who has access: Anyone" means anyone with the `/exec` URL could read/write it.
-For a friends' tracker that's usually fine. To add a light shared password:
+Logins are enforced by the **backend**, not the webpage:
 
-1. In `Code.gs` set `var SHARED_TOKEN = "some-long-random-string";` → **Deploy →
-   Manage deployments → edit → Deploy** again (redeploy the same web app).
-2. In `index.html` set `var API_TOKEN = "some-long-random-string";` (the same
-   value) → redeploy the frontend.
+- The 4 PINs are stored only as one-way hashes inside the Apps Script project
+  (in Script Properties) — they are **not** in `index.html`, so no one can read
+  them from "View Source".
+- When someone enters the right PIN, the server hands the browser a **signed
+  token** (stamped with a secret only the script knows). Every change must carry
+  a valid token, and the token's **role** has to allow that action:
+  - **admin** (Vivek): everything, incl. add/remove/rename people and reset PINs
+  - **editor** (Akshay, Praney): add/edit/delete expenses, settle up, currency
+  - **viewer** (Logesh): read-only — the server refuses every write
+- A view-only person therefore **cannot** write even if they tamper with the
+  page, and you can't gain powers by creating a second profile with someone's
+  name (roles are tied to the real account, not the display name).
 
-Now requests without the token are rejected. (This is obfuscation, not real
-auth — the token still ships in the frontend — but it stops casual URL sharing.)
+### Changing PINs
+- Anyone can change **their own** PIN in the app under **Your PIN → Change your
+  PIN**.
+- The admin can reset **anyone's** PIN there too (admin-only panel).
+- Forgot a PIN / locked out? In the Apps Script editor open `Code.gs`, edit the
+  `id` and `pin` at the top of `resetPinManual_()`, press **Run** once.
+- To force everyone to log in again, delete the `AUTH_SECRET` row in
+  **Project Settings → Script Properties**.
+
+> Honest limits: reads (the load endpoint) are still open to anyone with the
+> `/exec` URL — that's fine, the expense data isn't sensitive. And once *you*
+> are logged in, your own browser holds your own token; that's expected. What's
+> now impossible: reading other people's PINs, logging in as someone else, or a
+> viewer making any change.
 
 ## Updating the backend later
 
@@ -133,5 +152,11 @@ enough.
   the web app wasn't deployed to **Anyone**. Re-check Part 1 steps 4–6.
 - **Changes don't appear for others** — they will within ~10s; a hard refresh
   forces it. Make sure everyone uses the same deployed URL.
-- **"unauthorized"** — token mismatch: `SHARED_TOKEN` (Code.gs) and `API_TOKEN`
-  (index.html) must be identical, and you must redeploy both after changing them.
+- **"Your session ended — please log in again"** — your login token expired
+  (they last 30 days) or you rotated `AUTH_SECRET`. Just log in again.
+- **A friend can't log in after the security update** — make sure you
+  **redeployed `Code.gs`** (Deploy → Manage deployments → Edit → Deploy). The
+  new login only works once the new backend is live.
+- **Everyone's PINs** start at the originals (Akshay 2005, Praney 3699, Vivek
+  7733, Logesh 1234). Because those were public before, **change them** after
+  the update (Your PIN → Change your PIN).
