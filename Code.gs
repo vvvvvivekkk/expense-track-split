@@ -87,31 +87,22 @@ function pinHash_(id, pin) {
 // The live accounts table (hashes + roles), seeded from DEFAULT_ACCOUNTS once.
 function accounts_() {
   var p = props_(), raw = p.getProperty("ACCOUNTS_V1");
+  var stored = {};
+  if (raw) { try { stored = JSON.parse(raw) || {}; } catch (_) { stored = {}; } }
+  // Only the ORIGINAL members (DEFAULT_ACCOUNTS) are login accounts. People added
+  // later via "Add a person" are split-participants only — they never become
+  // login profiles, so they don't show on the login screen or in Set PINs.
   var acc = {};
-  if (raw) { try { acc = JSON.parse(raw) || {}; } catch (_) { acc = {}; } }
-  else {
-    // first run: seed the original four from DEFAULT_ACCOUNTS
-    Object.keys(DEFAULT_ACCOUNTS).forEach(function (id) {
-      var a = DEFAULT_ACCOUNTS[id];
-      acc[id] = { name: a.name, role: a.role, pinHash: pinHash_(id, a.pin) };
-    });
-  }
-  // Keep the account list in sync with the People tab so every person can log
-  // in. A newly added person becomes a VIEWER with no PIN yet (pinHash ""),
-  // which means they can't sign in until the admin sets their PIN. People who
-  // were removed lose their account.
-  var people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS);
-  var changed = false, present = {};
-  people.forEach(function (pp) {
-    var id = String(pp.id); if (!id) return;
-    present[id] = true;
-    if (!acc[id]) { acc[id] = { name: String(pp.name || ""), role: "viewer", pinHash: "" }; changed = true; }
-    else if (acc[id].name !== String(pp.name || "")) { acc[id].name = String(pp.name || ""); changed = true; }
+  Object.keys(DEFAULT_ACCOUNTS).forEach(function (id) {
+    if (stored[id]) acc[id] = stored[id];            // keep their saved role + PIN
+    else { var a = DEFAULT_ACCOUNTS[id]; acc[id] = { name: a.name, role: a.role, pinHash: pinHash_(id, a.pin) }; }
   });
-  Object.keys(acc).forEach(function (id) {
-    if (!present[id]) { delete acc[id]; changed = true; }
-  });
-  if (!raw || changed) p.setProperty("ACCOUNTS_V1", JSON.stringify(acc));
+  // Keep member display names in sync with the People tab (handles renames).
+  var people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS), byId = {};
+  people.forEach(function (pp) { byId[String(pp.id)] = String(pp.name || ""); });
+  Object.keys(acc).forEach(function (id) { if (byId[id] !== undefined) acc[id].name = byId[id]; });
+  // Persist (this also drops any stray non-member accounts a prior version added).
+  p.setProperty("ACCOUNTS_V1", JSON.stringify(acc));
   return acc;
 }
 function saveAccounts_(acc) { props_().setProperty("ACCOUNTS_V1", JSON.stringify(acc)); }
