@@ -1296,8 +1296,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     // Login accounts (id, name, role) come from the server. In local/dev mode
     // (no backend) there are none, so synthesize them from people as admins.
     accounts = Array.isArray(d.accounts) && d.accounts.length
-      ? d.accounts.map(function(a){ return {id:String(a.id),name:String(a.name),role:String(a.role||"viewer")}; })
-      : people.map(function(p){ return {id:p.id,name:p.name,role:"admin"}; });
+      ? d.accounts.map(function(a){ return {id:String(a.id),name:String(a.name),role:String(a.role||"viewer"),hasPin:(a.hasPin!==false)}; })
+      : people.map(function(p){ return {id:p.id,name:p.name,role:"admin",hasPin:true}; });
     ready=true; afterData(); }
 
   /* ---------- API (Google Sheet via Apps Script) ---------- */
@@ -1472,7 +1472,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
     box.textContent="";
     accounts.forEach(function(ac){
       var row=document.createElement("div"); row.className="set-row";
-      var lab=document.createElement("span"); lab.textContent=ac.name+" ("+ac.role+")"; lab.style.flex="1"; lab.style.fontSize=".88rem";
+      var lab=document.createElement("span"); lab.textContent=ac.name+" ("+ac.role+")"+(ac.hasPin===false?" · no PIN yet":""); lab.style.flex="1"; lab.style.fontSize=".88rem";
+      if(ac.hasPin===false){ lab.style.color="var(--accent)"; }
       var inp=document.createElement("input"); inp.type="text"; inp.inputMode="numeric"; inp.maxLength=4; inp.placeholder="New 4-digit PIN"; inp.style.maxWidth="130px"; inp.autocomplete="off";
       var btn=document.createElement("button"); btn.className="removep"; btn.type="button"; btn.textContent="Set";
       btn.style.color="var(--accent)"; btn.style.borderColor="var(--accent)";
@@ -1765,7 +1766,8 @@ var API_TOKEN = ""; // leave "" unless you set SHARED_TOKEN in Code.gs
   // Login tiles: each name once (drops a stray duplicate profile), ordered A V P L.
   function gateAccounts(){
     var seen={}, list=[];
-    accounts.forEach(function(a){ var k=(a.name||"").trim().toLowerCase(); if(seen[k]) return; seen[k]=true; list.push(a); });
+    // Only show people who can actually sign in (a PIN has been set).
+    accounts.forEach(function(a){ if(a.hasPin===false) return; var k=(a.name||"").trim().toLowerCase(); if(seen[k]) return; seen[k]=true; list.push(a); });
     list.sort(function(x,y){ var kx=(x.name||"").trim().toLowerCase(), ky=(y.name||"").trim().toLowerCase();
       var ox=PREFERRED_ORDER[kx]!=null?PREFERRED_ORDER[kx]:100, oy=PREFERRED_ORDER[ky]!=null?PREFERRED_ORDER[ky]:100;
       return ox-oy; });

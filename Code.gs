@@ -87,22 +87,41 @@ function pinHash_(id, pin) {
 // The live accounts table (hashes + roles), seeded from DEFAULT_ACCOUNTS once.
 function accounts_() {
   var p = props_(), raw = p.getProperty("ACCOUNTS_V1");
-  if (raw) { try { return JSON.parse(raw); } catch (_) {} }
   var acc = {};
-  Object.keys(DEFAULT_ACCOUNTS).forEach(function (id) {
-    var a = DEFAULT_ACCOUNTS[id];
-    acc[id] = { name: a.name, role: a.role, pinHash: pinHash_(id, a.pin) };
+  if (raw) { try { acc = JSON.parse(raw) || {}; } catch (_) { acc = {}; } }
+  else {
+    // first run: seed the original four from DEFAULT_ACCOUNTS
+    Object.keys(DEFAULT_ACCOUNTS).forEach(function (id) {
+      var a = DEFAULT_ACCOUNTS[id];
+      acc[id] = { name: a.name, role: a.role, pinHash: pinHash_(id, a.pin) };
+    });
+  }
+  // Keep the account list in sync with the People tab so every person can log
+  // in. A newly added person becomes a VIEWER with no PIN yet (pinHash ""),
+  // which means they can't sign in until the admin sets their PIN. People who
+  // were removed lose their account.
+  var people = readRows_(PEOPLE_TAB, PEOPLE_HEADERS);
+  var changed = false, present = {};
+  people.forEach(function (pp) {
+    var id = String(pp.id); if (!id) return;
+    present[id] = true;
+    if (!acc[id]) { acc[id] = { name: String(pp.name || ""), role: "viewer", pinHash: "" }; changed = true; }
+    else if (acc[id].name !== String(pp.name || "")) { acc[id].name = String(pp.name || ""); changed = true; }
   });
-  p.setProperty("ACCOUNTS_V1", JSON.stringify(acc));
+  Object.keys(acc).forEach(function (id) {
+    if (!present[id]) { delete acc[id]; changed = true; }
+  });
+  if (!raw || changed) p.setProperty("ACCOUNTS_V1", JSON.stringify(acc));
   return acc;
 }
 function saveAccounts_(acc) { props_().setProperty("ACCOUNTS_V1", JSON.stringify(acc)); }
 
-// Public account list for the login screen — names + roles only, no secrets.
+// Public account list — names + roles only, no secrets. hasPin says whether a
+// PIN has been set yet (so the login screen can skip people who can't sign in).
 function publicAccounts_() {
   var acc = accounts_();
   return Object.keys(acc).map(function (id) {
-    return { id: id, name: acc[id].name, role: acc[id].role };
+    return { id: id, name: acc[id].name, role: acc[id].role, hasPin: !!acc[id].pinHash };
   });
 }
 
